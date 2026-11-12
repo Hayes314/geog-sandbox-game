@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>地理沙盆 · 2.5D 地形、水流與建築</title>
+<title>地理沙盆 · 2.5D 視角</title>
 <style>
   html, body, *, *::before, *::after {
     user-select: none !important;
@@ -22,7 +22,7 @@
   }
   #app{display:flex;height:100%}
   #panel{
-    width:286px;flex:0 0 286px;height:100%;overflow-y:auto;
+    width:282px;flex:0 0 282px;height:100%;overflow-y:auto;
     background:linear-gradient(180deg,#161c25,#11161e);
     border-right:1px solid #232c38;padding:16px 16px 40px;
   }
@@ -30,19 +30,19 @@
   #panel::-webkit-scrollbar-thumb{background:#2b3644;border-radius:4px}
   h1{font-size:15px;margin:0 0 2px;letter-spacing:.08em;color:#eaf2ff}
   .sub{font-size:11px;color:#6b7d92;margin-bottom:16px;letter-spacing:.05em}
-  .group{margin-bottom:14px}
+  .group{margin-bottom:15px}
   .group>label.t{
     display:block;font-size:11px;letter-spacing:.14em;
     color:#7f93aa;margin-bottom:7px;text-transform:uppercase;
   }
   .lbl{
     display:flex;justify-content:space-between;align-items:center;
-    font-size:11px;color:#7f93aa;margin:8px 0 3px;letter-spacing:.05em;
+    font-size:11px;color:#7f93aa;margin:9px 0 3px;letter-spacing:.05em;
   }
   .lbl:first-of-type{margin-top:2px}
-  .row{display:flex;gap:6px;flex-wrap:wrap}
+  .row{display:flex;gap:7px;flex-wrap:wrap}
   button{
-    flex:1 1 auto;min-width:62px;padding:7px 6px;font-size:11.5px;
+    flex:1 1 auto;min-width:72px;padding:8px 10px;font-size:12px;
     color:#cfe0f3;background:#1e2836;border:1px solid #2e3c4e;
     border-radius:7px;cursor:pointer;transition:.15s;font-family:inherit;
   }
@@ -51,8 +51,8 @@
   button.on{background:#2b6a8f;border-color:#3f93c4;color:#fff;box-shadow:0 0 12px #2b6a8f66}
   button.play{background:#1d5a3a;border-color:#2d8157}
   button.play.on{background:#8f2b2b;border-color:#c43f3f;box-shadow:0 0 12px #8f2b2b66}
-  input[type=range]{width:100%;accent-color:#4aa3d8;height:16px;cursor:pointer}
-  .chk{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;cursor:pointer;color:#b7c6d8}
+  input[type=range]{width:100%;accent-color:#4aa3d8;height:18px;cursor:pointer}
+  .chk{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;cursor:pointer;color:#b7c6d8}
   .chk input{accent-color:#4aa3d8;width:15px;height:15px;cursor:pointer}
   .chk:hover{color:#fff}
   .val{color:#5fb4e8;font-variant-numeric:tabular-nums;letter-spacing:0}
@@ -77,37 +77,33 @@
 <div id="app">
   <aside id="panel">
     <h1>地理沙盆</h1>
-    <div class="sub">2.5D SANDBOX · 水流 · 建築</div>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 2.5D 視角</div>
 
-    <!-- 視角 -->
+    <!-- 視覺方向 -->
     <div class="group">
-      <label class="t">視角</label>
-      <div class="lbl"><span>方位角</span><span class="val" id="vYaw">35°</span></div>
-      <input type="range" id="rYaw" min="0" max="360" value="35" step="1">
-      <div class="lbl"><span>俯仰角</span><span class="val" id="vElev">55°</span></div>
-      <input type="range" id="rElev" min="12" max="88" value="55" step="1">
-      <div class="lbl"><span>高度誇張</span><span class="val" id="vHS">1.0×</span></div>
-      <input type="range" id="rHS" min="0.3" max="2.2" value="1" step="0.05">
-    </div>
-
-    <!-- 光照 -->
-    <div class="group">
-      <label class="t">光照</label>
-      <div class="lbl"><span>方位</span><span class="val" id="vAz">315°</span></div>
+      <label class="t">視覺方向</label>
+      <div class="lbl"><span>視角傾斜</span><span class="val" id="vTilt">0.30</span></div>
+      <input type="range" id="rTilt" min="0" max="1" value="0.30" step="0.02">
+      <div class="lbl"><span>視圖旋轉</span><span class="val" id="vRot">0°</span></div>
+      <input type="range" id="rRot" min="0" max="360" value="0" step="1">
+      <div class="lbl"><span>光照方位</span><span class="val" id="vAz">315°</span></div>
       <input type="range" id="rAz" min="0" max="360" value="315" step="1">
-      <div class="lbl"><span>仰角</span><span class="val" id="vEl">45°</span></div>
+      <div class="lbl"><span>光照仰角</span><span class="val" id="vEl">45°</span></div>
       <input type="range" id="rEl" min="5" max="85" value="45" step="1">
       <div class="lbl"><span>陰影對比</span><span class="val" id="vCon">0.70</span></div>
       <input type="range" id="rCon" min="0" max="1.2" value="0.7" step="0.02">
     </div>
 
-    <!-- 時間 -->
+    <!-- 時間控制 -->
     <div class="group">
       <label class="t">時間推進</label>
       <div class="row">
         <button id="btnPlay" class="play">▶ 開始</button>
         <button id="btnClearWater">清除水</button>
       </div>
+    </div>
+
+    <div class="group">
       <div class="lbl"><span>時間流速</span><span class="val" id="vSpeed">1.00×</span></div>
       <input type="range" id="rSpeed" min="0.25" max="4" value="1" step="0.25">
       <div class="lbl"><span>降雨量</span><span class="val" id="vRain">1.0</span></div>
@@ -132,15 +128,11 @@
         <button id="btnRaise" class="on">抬升 ▲</button>
         <button id="btnLower">下陷 ▼</button>
       </div>
-      <div class="row" style="margin-top:6px">
-        <button id="btnBuild">放置建築 🏠</button>
-        <button id="btnRemove">拆除建築 ✕</button>
-      </div>
-      <div class="lbl"><span>筆刷半徑 / 建築大小</span><span class="val" id="vRadius">14</span></div>
-      <input type="range" id="rRadius" min="3" max="40" value="14" step="1">
     </div>
 
     <div class="group">
+      <div class="lbl"><span>筆刷半徑</span><span class="val" id="vRadius">14</span></div>
+      <input type="range" id="rRadius" min="3" max="40" value="14" step="1">
       <div class="lbl"><span>等高距</span><span class="val" id="vStep">25</span></div>
       <input type="range" id="rStep" min="0" max="4" value="2" step="1">
     </div>
@@ -156,8 +148,9 @@
     <div class="hint">
       <b>左鍵拖曳</b>抬升地形<br>
       <b>Shift + 拖曳</b>或<b>右鍵拖曳</b>下陷地形<br>
-      <b>放置建築</b>後單擊即可建屋，<b>拆除建築</b>後單擊移除<br>
-      拖動方位角/俯仰角可從任意角度觀察地形。
+      調整<b>視角傾斜</b>可獲得 2.5D 斜視效果，<br>
+      <b>視圖旋轉</b>讓地圖繞中心轉動。<br>
+      右上角羅盤顯示光源在螢幕上的方向。
     </div>
   </aside>
 
@@ -174,7 +167,7 @@
 /* ============================== 基本設定 ============================== */
 const N = 160;
 const GRID = N - 1;
-const SEA = 0.43;
+const RS = N * 4;                 // 場景烘焙解析度
 
 const cv      = document.getElementById('cv');
 const ctx     = cv.getContext('2d');
@@ -186,69 +179,61 @@ const dpr = Math.min(window.devicePixelRatio || 1, 2);
 let cw = 640, ch = 640;
 
 /* 地形與流體 */
-let hmap  = new Float32Array(N * N);
-let water = new Float32Array(N * N);
-let sed   = new Float32Array(N * N);
-let fluxH = new Float32Array(N * N);
-let fluxV = new Float32Array(N * N);
-const dW  = new Float32Array(N * N);
-const dS  = new Float32Array(N * N);
+let hmap    = new Float32Array(N * N);
+let water   = new Float32Array(N * N);
+let sed     = new Float32Array(N * N);
+let fluxH   = new Float32Array(N * N);
+let fluxV   = new Float32Array(N * N);
+const dW    = new Float32Array(N * N);
+const dS    = new Float32Array(N * N);
 
-/* 建築 */
-const BUILDING_COLORS = [
-  [201, 106,  78],
-  [122, 155, 184],
-  [217, 194, 122],
-  [143, 168, 122],
-  [181, 138, 156],
-  [111, 143, 160],
-  [196, 152, 108],
-];
-let buildings = [];   // { gx, gy, h, w, color }
+/* 地形貼圖 */
+const terrainCanvas = document.createElement('canvas');
+terrainCanvas.width  = N;
+terrainCanvas.height = N;
+const terrainCtx = terrainCanvas.getContext('2d');
+let terrainImage = null;
+let terrainPixels = null;
 
-/* 視角 */
-let viewYaw   = 35;    // 度
-let viewElev  = 55;    // 度
-let heightScale = 1.0;
+/* 場景烘焙（地形 + 等高線） */
+const sceneCanvas = document.createElement('canvas');
+sceneCanvas.width  = RS;
+sceneCanvas.height = RS;
+const sceneCtx = sceneCanvas.getContext('2d');
 
-/* 光照 */
-let lightAzimuth   = 315;
-let lightElevation = 45;
-let shadowContrast = 0.70;
-
-/* 預計算投影 */
-let cosY = 1, sinY = 0, sinE = 1, cosE = 0;
-let worldSize = 600, hUnit = 100, halfW = 320, halfH = 320;
-let LX = 0, LY = 0, LZ = 1;
-
-/* 渲染解析度 */
-let R = 96;
-let cellG = N / R;
-let renderH = new Float32Array(R * R);
-let renderW = new Float32Array(R * R);
-
-/* 等高線 */
+/* 等高線（存網格座標 0..GRID） */
 let contours = [];
 let contourStep = 0.025;
 let needsContour = true;
-let needsDraw = true;
-let contourSkip = 0;
+let needsDraw    = true;
+let contourSkip  = 0;
 let terrainDirty = true;
+let sceneDirty   = true;
 
 /* 工具 */
-let tool = 'raise';  // raise | lower | build | remove
+let tool = 'raise';
 let brushRadius = 14;
 let pointerInside = false;
-let pointerPos = { x: 0, y: 0 };
+let pointerScreen = { x: 0, y: 0 };
+let pointerMap    = { x: 0, y: 0 };
 let dragging = false;
 let lastGrid = null;
 
 /* 時間 */
 let timeRunning = false;
-let timeSpeed = 1.0;
-let rainMultiplier = 1.0;
+let timeSpeed   = 1.0;
+let rainMultiplier    = 1.0;
 let erosionMultiplier = 1.0;
-let simTimeAccum = 0;
+
+/* 視覺參數 */
+let lightAzimuth   = 315;
+let lightElevation = 45;
+let shadowContrast = 0.70;
+let viewRotation   = 0;    // 弧度
+let tilt           = 0.30; // 0..1
+
+/* 透視參數（每幀更新） */
+let _S = 600, _zf = 1.9, _invZf = 1 / 1.9;
 
 /* 模擬常數 */
 const baseRain     = 0.0030;
@@ -257,6 +242,7 @@ const baseErosion  = 2.0;
 const baseCapacity = 12.0;
 const baseEvap     = 0.010;
 
+/* 顯示開關 */
 const ui = {
   contour: document.getElementById('cContour'),
   label:   document.getElementById('cLabel'),
@@ -296,23 +282,25 @@ function fbm(x, y, seed, oct) {
   return sum / norm;
 }
 
-/* ============================== 色階（暖色地形，與水不撞色） ============================== */
+/* ============================== 色階（去藍化的大地色系） ============================== */
 const STOPS = [
-  [0.00, [ 12,  32,  52]],
-  [0.22, [ 24,  58,  86]],
-  [0.34, [ 40,  86, 116]],
-  [0.41, [ 62, 118, 138]],
-  [0.435,[ 96, 148, 152]],
-  [0.452,[214, 196, 150]],
-  [0.480,[196, 190, 128]],
-  [0.530,[158, 170,  96]],
-  [0.600,[124, 156,  84]],
-  [0.680,[ 88, 128,  66]],
-  [0.760,[112, 118,  78]],
-  [0.830,[136, 118,  96]],
-  [0.900,[168, 156, 144]],
-  [0.960,[234, 238, 244]],
-  [1.00, [255, 255, 255]],
+  [0.00, [ 34,  27,  22]],   // 最深海床
+  [0.15, [ 48,  38,  30]],
+  [0.28, [ 70,  55,  40]],
+  [0.36, [ 96,  76,  52]],
+  [0.40, [128, 104,  70]],
+  [0.43, [176, 152, 108]],   // 淺海沙底
+  [0.445,[206, 188, 140]],   // 沙灘
+  [0.47, [216, 204, 158]],
+  [0.50, [196, 196, 142]],   // 低地草原
+  [0.56, [156, 174, 102]],
+  [0.64, [112, 148,  84]],
+  [0.72, [ 84, 118,  70]],   // 森林
+  [0.80, [104, 104,  86]],
+  [0.87, [138, 128, 118]],   // 岩石
+  [0.93, [176, 172, 168]],
+  [0.97, [216, 218, 222]],
+  [1.00, [252, 253, 255]],
 ];
 const LUT_N = 512;
 const lut = new Uint8Array(LUT_N * 3);
@@ -349,9 +337,8 @@ function generateTerrain(seed) {
     }
   }
   clearWater();
-  buildings = [];
+  renderTerrain();
   needsContour = true;
-  terrainDirty = true;
 }
 
 function flattenTerrain() {
@@ -363,9 +350,8 @@ function flattenTerrain() {
     }
   }
   clearWater();
-  buildings = [];
+  renderTerrain();
   needsContour = true;
-  terrainDirty = true;
 }
 
 function clearWater() {
@@ -376,211 +362,236 @@ function clearWater() {
   needsDraw = true;
 }
 
-/* ============================== 降採樣到渲染網格 ============================== */
-function downSample() {
-  cellG = N / R;
-  for (let ry = 0; ry < R; ry++) {
-    for (let rx = 0; rx < R; rx++) {
-      const x0 = Math.floor(rx * cellG), x1 = Math.min(N, Math.floor((rx + 1) * cellG));
-      const y0 = Math.floor(ry * cellG), y1 = Math.min(N, Math.floor((ry + 1) * cellG));
-      let sh = 0, sw = 0, cnt = 0;
-      for (let y = y0; y < y1; y++) {
-        const row = y * N;
-        for (let x = x0; x < x1; x++) {
-          sh += hmap[row + x];
-          sw += water[row + x];
-          cnt++;
-        }
-      }
-      if (cnt === 0) cnt = 1;
-      const idx = ry * R + rx;
-      renderH[idx] = sh / cnt;
-      renderW[idx] = sw / cnt;
-    }
-  }
+/* ============================== 地形貼圖 ============================== */
+function initTerrainImage() {
+  terrainImage  = terrainCtx.createImageData(N, N);
+  terrainPixels = terrainImage.data;
+  for (let i = 3; i < terrainPixels.length; i += 4) terrainPixels[i] = 255;
 }
 
-/* ============================== 投影 ============================== */
-const invN = 1 / N;
-let _px = 0, _py = 0, _pd = 0;
-
-function proj(gx, gy, h) {
-  const wx = gx * invN - 0.5;
-  const wy = gy * invN - 0.5;
-  const rx = wx * cosY - wy * sinY;
-  const ry = wx * sinY + wy * cosY;
-  _px = halfW + rx * worldSize;
-  _py = halfH + ry * sinE * worldSize - h * cosE * hUnit;
-  _pd = ry;
-}
-
-function updateProjection() {
-  const yawR = viewYaw * Math.PI / 180;
-  const elevR = viewElev * Math.PI / 180;
-  cosY = Math.cos(yawR); sinY = Math.sin(yawR);
-  sinE = Math.sin(elevR); cosE = Math.cos(elevR);
-
-  const extY = 0.72 * sinE + 0.30 * heightScale * cosE;
-  worldSize = Math.min(cw / 1.44, ch / (2 * Math.max(0.22, extY))) * 0.94;
-  hUnit = worldSize * 0.30 * heightScale;
-  halfW = cw / 2;
-  halfH = ch / 2;
-
-  const azR = lightAzimuth * Math.PI / 180;
-  const elR = lightElevation * Math.PI / 180;
-  LX =  Math.sin(azR) * Math.cos(elR);
-  LY = -Math.cos(azR) * Math.cos(elR);
-  LZ =  Math.sin(elR);
-}
-
-/* ============================== 3D 地形繪製 ============================== */
-function drawTerrain3D() {
+function renderTerrain() {
+  const px = terrainPixels;
   const shading = ui.shade.checked;
-  const relief = 0.55;
-  const waterMin = 0.0022;
 
-  const xStart = sinY >= 0 ? R - 1 : 0;
-  const xEnd   = sinY >= 0 ? -1 : R;
-  const yStart = cosY >= 0 ? R - 1 : 0;
-  const yEnd   = cosY >= 0 ? -1 : R;
-  const xStep  = sinY >= 0 ? -1 : 1;
-  const yStep  = cosY >= 0 ? -1 : 1;
+  const azRad = lightAzimuth   * Math.PI / 180;
+  const elRad = lightElevation * Math.PI / 180;
+  const lx =  Math.sin(azRad) * Math.cos(elRad);
+  const ly = -Math.cos(azRad) * Math.cos(elRad);
+  const lz =  Math.sin(elRad);
+  const ambient  = 0.5;
+  const strength = shadowContrast;
 
-  const faceX0 = sinY > 0;   // 可見 x = gx0 面
-  const faceY0 = cosY > 0;   // 可見 y = gy0 面
+  const H = hmap, W = water, S = sed;
 
-  for (let y = yStart; y !== yEnd; y += yStep) {
-    const row = y * R;
-    for (let x = xStart; x !== xEnd; x += xStep) {
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
       const i = row + x;
-      const h = renderH[i];
+      const h = H[i];
 
-      const gx0 = x * cellG, gy0 = y * cellG;
-      const gx1 = gx0 + cellG, gy1 = gy0 + cellG;
-
-      /* 四角（頂面） */
-      proj(gx0, gy0, h); const x00 = _px, y00 = _py;
-      proj(gx1, gy0, h); const x10 = _px, y10 = _py;
-      proj(gx1, gy1, h); const x11 = _px, y11 = _py;
-      proj(gx0, gy1, h); const x01 = _px, y01 = _py;
-
-      const minX = Math.min(x00, x10, x11, x01);
-      const maxX = Math.max(x00, x10, x11, x01);
-      const minY = Math.min(y00, y10, y11, y01);
-      const maxY = Math.max(y00, y10, y11, y01);
-      if (maxX < -4 || minX > cw + 4 || maxY < -4 || minY > ch + 4) continue;
-
-      /* 顏色 */
       let ci = (h * (LUT_N - 1)) | 0;
       if (ci < 0) ci = 0; else if (ci >= LUT_N) ci = LUT_N - 1;
-      let cr = lut[ci * 3], cg = lut[ci * 3 + 1], cb = lut[ci * 3 + 2];
+      let r = lut[ci * 3], g = lut[ci * 3 + 1], b = lut[ci * 3 + 2];
 
       if (shading) {
-        const hL = x > 0     ? renderH[i - 1] : h;
-        const hR = x < R - 1 ? renderH[i + 1] : h;
-        const hT = y > 0     ? renderH[i - R] : h;
-        const hB = y < R - 1 ? renderH[i + R] : h;
-        const dX = (hR - hL) * R * 0.5 * relief;
-        const dY = (hB - hT) * R * 0.5 * relief;
-        const nlen = 1 / Math.sqrt(dX * dX + dY * dY + 1);
-        const nx = -dX * nlen, ny = -dY * nlen, nz = nlen;
-        let dot = nx * LX + ny * LY + nz * LZ;
+        const xl = x > 0     ? H[i - 1] : h;
+        const xr = x < GRID  ? H[i + 1] : h;
+        const yt = y > 0     ? H[i - N] : h;
+        const yb = y < GRID  ? H[i + N] : h;
+        const dzdx = (xr - xl) * 62;
+        const dzdy = (yb - yt) * 62;
+        const inv  = 1 / Math.sqrt(dzdx * dzdx + dzdy * dzdy + 1);
+        const nx = -dzdx * inv, ny = -dzdy * inv, nz = inv;
+        let dot = nx * lx + ny * ly + nz * lz;
         if (dot < 0) dot = 0; else if (dot > 1) dot = 1;
-        const sh = 0.42 + shadowContrast * dot;
-        cr *= sh; cg *= sh; cb *= sh;
+        let sh = ambient + strength * dot;
+        if (sh > 1.25) sh = 1.25;
+        r *= sh; g *= sh; b *= sh;
       }
 
-      const topFill = `rgb(${cr > 255 ? 255 : cr | 0},${cg > 255 ? 255 : cg | 0},${cb > 255 ? 255 : cb | 0})`;
+      /* ---- 水體（淺藍半透明，深淺影響顏色與透明度） ---- */
+      const w = W[i];
+      if (w > 0.0003) {
+        const deep = Math.min(1, w * 8);
+        let wr = 130 - 95 * deep;
+        let wg = 200 - 115 * deep;
+        let wb = 240 - 85 * deep;
 
-      /* ---- 側面 ---- */
-      const sr = Math.min(255, cr * 0.56) | 0;
-      const sg = Math.min(255, cg * 0.56) | 0;
-      const sb = Math.min(255, cb * 0.56) | 0;
-      const sideFill = `rgb(${sr},${sg},${sb})`;
-      ctx.fillStyle = sideFill;
+        const s = S[i];
+        if (s > 0.0003) {
+          let cc = Math.min(1, s / (w + 0.001) * 5);
+          wr = wr * (1 - cc) + 165 * cc;
+          wg = wg * (1 - cc) + 135 * cc;
+          wb = wb * (1 - cc) +  95 * cc;
+        }
 
-      /* x 方向側面 */
-      let bx0, by0, bx1, by1;
-      if (faceX0) { bx0 = gx0; by0 = gy0; bx1 = gx0; by1 = gy1; }
-      else        { bx0 = gx1; by0 = gy0; bx1 = gx1; by1 = gy1; }
+        const alpha = Math.min(0.88, w * 14);
+        r = r * (1 - alpha) + wr * alpha;
+        g = g * (1 - alpha) + wg * alpha;
+        b = b * (1 - alpha) + wb * alpha;
+      }
 
-      proj(bx0, by0, 0); const sx0 = _px, sy0 = _py;
-      proj(bx1, by1, 0); const sx1 = _px, sy1 = _py;
-      proj(bx0, by0, h); const tx0 = _px, ty0 = _py;
-      proj(bx1, by1, h); const tx1 = _px, ty1 = _py;
+      const o = i * 4;
+      px[o]     = r > 255 ? 255 : r < 0 ? 0 : r;
+      px[o + 1] = g > 255 ? 255 : g < 0 ? 0 : g;
+      px[o + 2] = b > 255 ? 255 : b < 0 ? 0 : b;
+    }
+  }
+  terrainCtx.putImageData(terrainImage, 0, 0);
+  sceneDirty = true;
+  needsDraw  = true;
+}
 
-      ctx.beginPath();
-      ctx.moveTo(tx0, ty0);
-      ctx.lineTo(tx1, ty1);
-      ctx.lineTo(sx1, sy1);
-      ctx.lineTo(sx0, sy0);
-      ctx.closePath();
-      ctx.fill();
+/* ============================== 水流模擬 ============================== */
+function computeFlux() {
+  const H = hmap, W = water;
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
 
-      /* y 方向側面 */
-      let cx0, cy0, cx1, cy1;
-      if (faceY0) { cx0 = gx0; cy0 = gy0; cx1 = gx1; cy1 = gy0; }
-      else        { cx0 = gx0; cy0 = gy1; cx1 = gx1; cy1 = gy1; }
+      if (x < N - 1) {
+        const j = i + 1;
+        const dh = (H[i] + W[i]) - (H[j] + W[j]);
+        let f = flowK * dh;
+        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
+        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
+        fluxH[i] = f;
+      }
 
-      proj(cx0, cy0, 0); const qx0 = _px, qy0 = _py;
-      proj(cx1, cy1, 0); const qx1 = _px, qy1 = _py;
-      proj(cx0, cy0, h); const ux0 = _px, uy0 = _py;
-      proj(cx1, cy1, h); const ux1 = _px, uy1 = _py;
-
-      ctx.beginPath();
-      ctx.moveTo(ux0, uy0);
-      ctx.lineTo(ux1, uy1);
-      ctx.lineTo(qx1, qy1);
-      ctx.lineTo(qx0, qy0);
-      ctx.closePath();
-      ctx.fill();
-
-      /* ---- 頂面 ---- */
-      ctx.fillStyle = topFill;
-      ctx.beginPath();
-      ctx.moveTo(x00, y00);
-      ctx.lineTo(x10, y10);
-      ctx.lineTo(x11, y11);
-      ctx.lineTo(x01, y01);
-      ctx.closePath();
-      ctx.fill();
-
-      /* 減少接縫 */
-      ctx.strokeStyle = topFill;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      /* ---- 水面 ---- */
-      const w = renderW[i];
-      if (w > waterMin) {
-        let depth = w * 5.5;
-        if (depth > 0.26) depth = 0.26;
-        const wz = h + depth;
-        const deep = Math.min(1, w * 14);
-        const alpha = 0.42 + deep * 0.22;
-
-        proj(gx0, gy0, wz); const wx00 = _px, wy00 = _py;
-        proj(gx1, gy0, wz); const wx10 = _px, wy10 = _py;
-        proj(gx1, gy1, wz); const wx11 = _px, wy11 = _py;
-        proj(gx0, gy1, wz); const wx01 = _px, wy01 = _py;
-
-        const wr = 118 - deep * 26;
-        const wg = 196 - deep * 26;
-        const wb = 240 - deep * 8;
-        ctx.fillStyle = `rgba(${wr | 0},${wg | 0},${wb | 0},${alpha.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.moveTo(wx00, wy00);
-        ctx.lineTo(wx10, wy10);
-        ctx.lineTo(wx11, wy11);
-        ctx.lineTo(wx01, wy01);
-        ctx.closePath();
-        ctx.fill();
+      if (y < N - 1) {
+        const j = i + N;
+        const dh = (H[i] + W[i]) - (H[j] + W[j]);
+        let f = flowK * dh;
+        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
+        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
+        fluxV[i] = f;
       }
     }
   }
 }
 
-/* ============================== 等高線 (Marching Squares, 網格座標) ============================== */
+function applyFlux(dt) {
+  dW.fill(0);
+  dS.fill(0);
+  const W = water, S = sed;
+
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N - 1; x++) {
+      const i = row + x;
+      const f = fluxH[i];
+      if (f === 0) continue;
+      const j = i + 1;
+      const vol = f * dt;
+      dW[i] -= vol; dW[j] += vol;
+
+      if (vol > 0) {
+        const conc = S[i] / (W[i] + 0.0001);
+        let m = vol * conc; if (m > S[i]) m = S[i];
+        dS[i] -= m; dS[j] += m;
+      } else {
+        const conc = S[j] / (W[j] + 0.0001);
+        let m = -vol * conc; if (m > S[j]) m = S[j];
+        dS[j] -= m; dS[i] += m;
+      }
+    }
+  }
+
+  for (let y = 0; y < N - 1; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+      const f = fluxV[i];
+      if (f === 0) continue;
+      const j = i + N;
+      const vol = f * dt;
+      dW[i] -= vol; dW[j] += vol;
+
+      if (vol > 0) {
+        const conc = S[i] / (W[i] + 0.0001);
+        let m = vol * conc; if (m > S[i]) m = S[i];
+        dS[i] -= m; dS[j] += m;
+      } else {
+        const conc = S[j] / (W[j] + 0.0001);
+        let m = -vol * conc; if (m > S[j]) m = S[j];
+        dS[j] -= m; dS[i] += m;
+      }
+    }
+  }
+
+  for (let i = 0; i < N * N; i++) {
+    let w = W[i] + dW[i]; if (w < 0) w = 0; W[i] = w;
+    let s = S[i] + dS[i]; if (s < 0) s = 0; S[i] = s;
+  }
+}
+
+function simulateErosion(dt) {
+  const H = hmap, W = water, S = sed;
+  const eroRate = baseErosion * erosionMultiplier;
+  const Kc = baseCapacity;
+
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+      if (W[i] < 0.001) continue;
+
+      const xl = x > 0     ? H[i - 1] : H[i];
+      const xr = x < N - 1 ? H[i + 1] : H[i];
+      const yt = y > 0     ? H[i - N] : H[i];
+      const yb = y < N - 1 ? H[i + N] : H[i];
+      const gx = (xr - xl) * 0.5 * GRID;
+      const gy = (yb - yt) * 0.5 * GRID;
+      const slope = Math.sqrt(gx * gx + gy * gy);
+      if (slope < 0.0001) continue;
+
+      let totalFlux = 0;
+      if (x > 0)     totalFlux += Math.abs(fluxH[i - 1]);
+      if (x < N - 1) totalFlux += Math.abs(fluxH[i]);
+      if (y > 0)     totalFlux += Math.abs(fluxV[i - N]);
+      if (y < N - 1) totalFlux += Math.abs(fluxV[i]);
+      if (totalFlux < 0.0001) continue;
+
+      let capacity = Kc * totalFlux * slope;
+      if (capacity > 0.30) capacity = 0.30;
+
+      if (S[i] < capacity) {
+        let amount = (capacity - S[i]) * eroRate * dt;
+        const maxErode = H[i] * 0.02;
+        if (amount > maxErode) amount = maxErode;
+        if (amount > 0) { H[i] -= amount; S[i] += amount; }
+      } else {
+        let amount = (S[i] - capacity) * 0.5 * dt;
+        if (amount > 0.01) amount = 0.01;
+        if (amount > 0) { H[i] += amount; S[i] -= amount; }
+      }
+
+      if (H[i] < 0) H[i] = 0;
+      if (H[i] > 1) H[i] = 1;
+      if (S[i] < 0) S[i] = 0;
+    }
+  }
+}
+
+function simulate(dt) {
+  if (dt <= 0) return;
+
+  const rain = baseRain * rainMultiplier * dt;
+  if (rain > 0) for (let i = 0; i < water.length; i++) water[i] += rain;
+
+  computeFlux();
+  applyFlux(dt);
+  simulateErosion(dt);
+
+  const evapF = 1 - baseEvap * dt;
+  for (let i = 0; i < water.length; i++) {
+    const w = water[i] * evapF;
+    water[i] = w < 0.0001 ? 0 : w;
+  }
+}
+
+/* ============================== 等高線（網格座標） ============================== */
 function edgePoint(e, x, y, v0, v1, v2, v3, level, out) {
   let ax, ay, av, bx, by, bv;
   switch (e) {
@@ -708,60 +719,161 @@ function buildContours() {
     }
   }
 
-  for (let i = 0; i < levels.length; i++) {
-    levels[i].segs = new Float32Array(levels[i].segs);
-  }
+  for (let i = 0; i < levels.length; i++) levels[i].segs = new Float32Array(levels[i].segs);
   contours = levels;
 }
 
-/* ============================== 3D 等高線繪製 ============================== */
-function drawContours3D() {
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+/* ============================== 透視映射 ============================== */
+function updateViewParams() {
+  _S = cw;
+  _zf = 1.001 + 3.0 * tilt;
+  _invZf = 1 / _zf;
+}
 
-  /* 首曲線 */
-  ctx.beginPath();
+function screenYToMapT(sy) {
+  const u = clamp(sy / _S, 0, 1);
+  const f = 1 - _invZf;
+  const invZ = u * f + _invZf;
+  const z = 1 / invZ;
+  return (_zf - z) / (_zf - 1);
+}
+
+function mapTToScreenY(t) {
+  const z = _zf - t * (_zf - 1);
+  const invZ = 1 / z;
+  return (invZ - _invZf) / (1 - _invZf) * _S;
+}
+
+function mapWidthAt(t) {
+  const z = _zf - t * (_zf - 1);
+  return 1 / z;
+}
+
+/* 網格座標 → 未旋轉的螢幕座標 */
+function mapToScreen(gx, gy) {
+  const t = clamp(gy / GRID, 0, 1);
+  const w = _S * mapWidthAt(t);
+  const sy = mapTToScreenY(t);
+  const sx = (_S - w) / 2 + (gx / GRID) * w;
+  return { x: sx, y: sy };
+}
+
+/* 螢幕座標 → 網格座標 */
+function screenToMap(sx, sy) {
+  let dx = sx - _S / 2;
+  let dy = sy - _S / 2;
+  if (viewRotation !== 0) {
+    const c = Math.cos(-viewRotation), s = Math.sin(-viewRotation);
+    const rx = dx * c - dy * s;
+    const ry = dx * s + dy * c;
+    dx = rx; dy = ry;
+  }
+  const bx = dx + _S / 2;
+  const by = dy + _S / 2;
+  const t = screenYToMapT(by);
+  const w = _S * mapWidthAt(t);
+  const gx = ((bx - (_S - w) / 2) / w) * GRID;
+  const gy = t * GRID;
+  return { x: gx, y: gy };
+}
+
+/* ============================== 場景烘焙 ============================== */
+function renderScene() {
+  const s = RS / GRID;
+
+  sceneCtx.clearRect(0, 0, RS, RS);
+  sceneCtx.imageSmoothingEnabled = true;
+  sceneCtx.imageSmoothingQuality = 'high';
+  sceneCtx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, RS, RS);
+
+  if (!ui.contour.checked) return;
+
+  const lw = RS / 640;
+  sceneCtx.lineCap = 'round';
+  sceneCtx.lineJoin = 'round';
+
+  sceneCtx.beginPath();
   for (let li = 0; li < contours.length; li++) {
     const lv = contours[li];
     if (ui.index.checked && lv.k % 5 === 0) continue;
-    const s = lv.segs;
-    const lvl = lv.v;
-    for (let i = 0; i < s.length; i += 4) {
-      proj(s[i], s[i + 1], lvl);
-      const ax = _px, ay = _py;
-      proj(s[i + 2], s[i + 3], lvl);
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(_px, _py);
+    const segs = lv.segs;
+    for (let i = 0; i < segs.length; i += 4) {
+      sceneCtx.moveTo(segs[i] * s, segs[i + 1] * s);
+      sceneCtx.lineTo(segs[i + 2] * s, segs[i + 3] * s);
     }
   }
-  ctx.strokeStyle = 'rgba(40,30,20,0.42)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  sceneCtx.strokeStyle = 'rgba(32,25,18,0.42)';
+  sceneCtx.lineWidth = lw;
+  sceneCtx.stroke();
 
-  /* 計曲線 */
   if (ui.index.checked) {
-    ctx.beginPath();
+    sceneCtx.beginPath();
     for (let li = 0; li < contours.length; li++) {
       const lv = contours[li];
       if (lv.k % 5 !== 0) continue;
-      const s = lv.segs;
-      const lvl = lv.v;
-      for (let i = 0; i < s.length; i += 4) {
-        proj(s[i], s[i + 1], lvl);
-        const ax = _px, ay = _py;
-        proj(s[i + 2], s[i + 3], lvl);
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(_px, _py);
+      const segs = lv.segs;
+      for (let i = 0; i < segs.length; i += 4) {
+        sceneCtx.moveTo(segs[i] * s, segs[i + 1] * s);
+        sceneCtx.lineTo(segs[i + 2] * s, segs[i + 3] * s);
       }
     }
-    ctx.strokeStyle = 'rgba(20,14,8,0.85)';
-    ctx.lineWidth = 1.7;
-    ctx.stroke();
+    sceneCtx.strokeStyle = 'rgba(18,13,8,0.80)';
+    sceneCtx.lineWidth = lw * 1.9;
+    sceneCtx.stroke();
   }
 }
 
-function drawLabels3D() {
-  const fs = Math.max(9, Math.round(cw / 78));
+/* ============================== 主繪製 ============================== */
+function draw() {
+  updateViewParams();
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  ctx.save();
+  if (viewRotation !== 0) {
+    const cx = cw / 2, cy = ch / 2;
+    ctx.translate(cx, cy);
+    ctx.rotate(viewRotation);
+    ctx.translate(-cx, -cy);
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const S = _S;
+
+  /* 逐行透視繪製，遠端合併多行以提升效能 */
+  let sy = 0;
+  while (sy < S) {
+    const t0 = screenYToMapT(sy);
+    const t1 = screenYToMapT(sy + 1);
+    let dy = 1;
+    const srcH1 = (t1 - t0) * RS;
+    if (srcH1 < 1) {
+      dy = Math.min(S - sy, Math.max(1, Math.ceil(1 / Math.max(0.0001, srcH1))));
+    }
+
+    const tNext = screenYToMapT(sy + dy);
+    const tm = (t0 + tNext) / 2;
+    const w = S * mapWidthAt(tm);
+    const srcY = t0 * RS;
+    const srcH = Math.max(0.5, (tNext - t0) * RS);
+    const dstX = (S - w) / 2;
+
+    ctx.drawImage(sceneCanvas, 0, srcY, RS, srcH, dstX, sy, w, dy);
+    sy += dy;
+  }
+
+  if (ui.contour.checked && ui.label.checked) drawLabels();
+  drawCursor();
+
+  ctx.restore();
+  drawCompass();
+}
+
+function drawLabels() {
+  const fs = Math.max(9, Math.round(_S / 72));
   ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -771,134 +883,78 @@ function drawLabels3D() {
 
   for (let li = 0; li < contours.length; li++) {
     const lv = contours[li];
-    const s = lv.segs;
-    const nSeg = s.length / 4;
-    if (nSeg < 8) continue;
+    const segs = lv.segs;
+    const nSeg = segs.length / 4;
+    if (nSeg < 6) continue;
 
-    const want = Math.min(3, Math.max(1, Math.round(nSeg / 160)));
+    const want = Math.min(4, Math.max(1, Math.round(nSeg / 70)));
     const stride = Math.max(1, Math.floor(nSeg / want));
     const txt = String(Math.round(lv.v * 1000));
     const tw = ctx.measureText(txt).width;
 
     for (let i = 0; i < nSeg; i += stride) {
       const o = i * 4;
-      const mx = (s[o] + s[o + 2]) * 0.5;
-      const my = (s[o + 1] + s[o + 3]) * 0.5;
-      proj(mx, my, lv.v);
-      const px = _px, py = _py;
-      if (px < 30 || px > cw - 30 || py < 16 || py > ch - 16) continue;
+      const p1 = mapToScreen(segs[o],     segs[o + 1]);
+      const p2 = mapToScreen(segs[o + 2], segs[o + 3]);
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      if (dx * dx + dy * dy < 100) continue;
 
-      ctx.fillStyle = 'rgba(255,255,255,0.80)';
+      let ang = Math.atan2(dy, dx);
+      if (ang > Math.PI / 2)  ang -= Math.PI;
+      if (ang < -Math.PI / 2) ang += Math.PI;
+
+      ctx.save();
+      ctx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+      ctx.rotate(ang);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.beginPath();
-      ctx.roundRect(px - tw / 2 - padX, py - boxH / 2, tw + padX * 2, boxH, 2.5);
+      ctx.roundRect(-tw / 2 - padX, -boxH / 2, tw + padX * 2, boxH, 2.5);
       ctx.fill();
 
       ctx.fillStyle = '#241a10';
-      ctx.fillText(txt, px, py + 0.5);
+      ctx.fillText(txt, 0, 0.5);
+      ctx.restore();
     }
   }
 }
 
-/* ============================== 建築繪製 ============================== */
-function drawBuildings() {
-  if (buildings.length === 0) return;
+function drawCursor() {
+  if (!pointerInside) return;
 
-  /* 遠 → 近 */
-  const sorted = buildings.slice().sort((a, b) => {
-    const ax = a.gx * invN - 0.5, ay = a.gy * invN - 0.5;
-    const bx = b.gx * invN - 0.5, by = b.gy * invN - 0.5;
-    const da = ax * sinY + ay * cosY;
-    const db = bx * sinY + by * cosY;
-    return db - da;
-  });
+  const t = clamp(pointerMap.y / GRID, 0, 1);
+  const w = _S * mapWidthAt(t);
+  const rx = Math.max(3, (brushRadius / GRID) * w);
 
-  const faceX0 = sinY > 0;
-  const faceY0 = cosY > 0;
+  const tHalf = brushRadius / GRID;
+  const syHi = mapTToScreenY(Math.min(1, t + tHalf));
+  const syLo = mapTToScreenY(Math.max(0, t - tHalf));
+  const ry = Math.max(3, Math.abs(syHi - syLo) / 2);
 
-  for (let n = 0; n < sorted.length; n++) {
-    const b = sorted[n];
-    const gi = b.gy * N + b.gx;
-    const baseZ = hmap[gi];
-    const topZ = baseZ + b.h;
-    const s = b.w * invN;   // 世界半寬
-
-    const wx = b.gx * invN - 0.5;
-    const wy = b.gy * invN - 0.5;
-
-    const x0 = wx - s, x1 = wx + s;
-    const y0 = wy - s, y1 = wy + s;
-
-    /* 世界→網格座標（用 proj 需要網格座標） */
-    const gx0 = (x0 + 0.5) * N, gx1 = (x1 + 0.5) * N;
-    const gy0 = (y0 + 0.5) * N, gy1 = (y1 + 0.5) * N;
-
-    /* 底面四角 */
-    proj(gx0, gy0, baseZ); const bx00 = _px, by00 = _py;
-    proj(gx1, gy0, baseZ); const bx10 = _px, by10 = _py;
-    proj(gx1, gy1, baseZ); const bx11 = _px, by11 = _py;
-    proj(gx0, gy1, baseZ); const bx01 = _px, by01 = _py;
-
-    /* 頂面四角 */
-    proj(gx0, gy0, topZ); const tx00 = _px, ty00 = _py;
-    proj(gx1, gy0, topZ); const tx10 = _px, ty10 = _py;
-    proj(gx1, gy1, topZ); const tx11 = _px, ty11 = _py;
-    proj(gx0, gy1, topZ); const tx01 = _px, ty01 = _py;
-
-    const col = b.color;
-    const sideR = (col[0] * 0.58) | 0;
-    const sideG = (col[1] * 0.58) | 0;
-    const sideB = (col[2] * 0.58) | 0;
-
-    /* x 方向側面 */
-    ctx.fillStyle = `rgb(${sideR},${sideG},${sideB})`;
-    ctx.beginPath();
-    if (faceX0) {
-      ctx.moveTo(tx00, ty00); ctx.lineTo(tx01, ty01);
-      ctx.lineTo(bx01, by01); ctx.lineTo(bx00, by00);
-    } else {
-      ctx.moveTo(tx10, ty10); ctx.lineTo(tx11, ty11);
-      ctx.lineTo(bx11, by11); ctx.lineTo(bx10, by10);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    /* y 方向側面（略暗） */
-    ctx.fillStyle = `rgb(${(sideR * 0.82) | 0},${(sideG * 0.82) | 0},${(sideB * 0.82) | 0})`;
-    ctx.beginPath();
-    if (faceY0) {
-      ctx.moveTo(tx00, ty00); ctx.lineTo(tx10, ty10);
-      ctx.lineTo(bx10, by10); ctx.lineTo(bx00, by00);
-    } else {
-      ctx.moveTo(tx01, ty01); ctx.lineTo(tx11, ty11);
-      ctx.lineTo(bx11, by11); ctx.lineTo(bx01, by01);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    /* 頂面 */
-    ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
-    ctx.beginPath();
-    ctx.moveTo(tx00, ty00);
-    ctx.lineTo(tx10, ty10);
-    ctx.lineTo(tx11, ty11);
-    ctx.lineTo(tx01, ty01);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,255,255,0.28)`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-}
-
-/* ============================== 羅盤 ============================== */
-function drawCompass() {
-  const Rr = 30;
-  const px = cw - Rr - 16;
-  const py = Rr + 16;
+  const p = mapToScreen(pointerMap.x, pointerMap.y);
 
   ctx.save();
   ctx.beginPath();
-  ctx.arc(px, py, Rr, 0, Math.PI * 2);
+  ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = tool === 'raise' ? 'rgba(120,235,170,0.9)' : 'rgba(255,150,120,0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = tool === 'raise' ? 'rgba(120,235,170,0.10)' : 'rgba(255,150,120,0.10)';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCompass() {
+  const R = 28;
+  const px = cw - R - 16;
+  const py = R + 16;
+
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.arc(px, py, R, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(13,19,27,0.78)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(90,110,135,0.45)';
@@ -906,13 +962,13 @@ function drawCompass() {
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(px - Rr + 5, py); ctx.lineTo(px + Rr - 5, py);
-  ctx.moveTo(px, py - Rr + 5); ctx.lineTo(px, py + Rr - 5);
+  ctx.moveTo(px - R + 5, py); ctx.lineTo(px + R - 5, py);
+  ctx.moveTo(px, py - R + 5); ctx.lineTo(px, py + R - 5);
   ctx.strokeStyle = 'rgba(90,110,135,0.28)';
   ctx.stroke();
 
-  const az = lightAzimuth * Math.PI / 180 + viewYaw * Math.PI / 180;
-  const len = Rr - 10;
+  const az = lightAzimuth * Math.PI / 180 + viewRotation;
+  const len = R - 9;
   const ex = px + Math.sin(az) * len;
   const ey = py - Math.cos(az) * len;
 
@@ -937,221 +993,20 @@ function drawCompass() {
   ctx.arc(px, py, 2.5, 0, Math.PI * 2);
   ctx.fillStyle = '#e8f0fa';
   ctx.fill();
+
   ctx.restore();
-}
-
-/* ============================== 光標 ============================== */
-function drawCursor() {
-  if (!pointerInside) return;
-  const r = brushRadius * (cw / N) * (worldSize / cw) * 1.0;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(pointerPos.x, pointerPos.y, Math.max(10, brushRadius * 0.9), 0, Math.PI * 2);
-  let col;
-  if (tool === 'raise') col = 'rgba(120,235,170,0.9)';
-  else if (tool === 'lower') col = 'rgba(255,150,120,0.9)';
-  else if (tool === 'build') col = 'rgba(255,215,110,0.95)';
-  else col = 'rgba(255,110,110,0.95)';
-  ctx.strokeStyle = col;
-  ctx.lineWidth = 1.6;
-  ctx.setLineDash([5, 4]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = col.replace('0.9', '0.08').replace('0.95', '0.08');
-  ctx.fill();
-  ctx.restore();
-}
-
-/* ============================== 主繪製 ============================== */
-function draw() {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cw, ch);
-
-  /* 天空 / 背景 */
-  const bg = ctx.createLinearGradient(0, 0, 0, ch);
-  bg.addColorStop(0, '#131c27');
-  bg.addColorStop(1, '#0a0f15');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, cw, ch);
-
-  updateProjection();
-  downSample();
-
-  drawTerrain3D();
-
-  if (ui.contour.checked) {
-    drawContours3D();
-    if (ui.label.checked) drawLabels3D();
-  }
-
-  drawBuildings();
-  drawCursor();
-  drawCompass();
-}
-
-/* ============================== 水流模擬 ============================== */
-function computeFlux() {
-  const H = hmap, W = water;
-  for (let y = 0; y < N; y++) {
-    const row = y * N;
-    for (let x = 0; x < N; x++) {
-      const i = row + x;
-      if (x < N - 1) {
-        const j = i + 1;
-        const dh = (H[i] + W[i]) - (H[j] + W[j]);
-        let f = flowK * dh;
-        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
-        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
-        fluxH[i] = f;
-      }
-      if (y < N - 1) {
-        const j = i + N;
-        const dh = (H[i] + W[i]) - (H[j] + W[j]);
-        let f = flowK * dh;
-        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
-        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
-        fluxV[i] = f;
-      }
-    }
-  }
-}
-
-function applyFlux(dt) {
-  dW.fill(0);
-  dS.fill(0);
-  const W = water, S = sed;
-
-  for (let y = 0; y < N; y++) {
-    const row = y * N;
-    for (let x = 0; x < N - 1; x++) {
-      const i = row + x;
-      const f = fluxH[i];
-      if (f === 0) continue;
-      const j = i + 1;
-      const vol = f * dt;
-      dW[i] -= vol; dW[j] += vol;
-      if (vol > 0) {
-        const conc = S[i] / (W[i] + 0.0001);
-        let sMove = vol * conc;
-        if (sMove > S[i]) sMove = S[i];
-        dS[i] -= sMove; dS[j] += sMove;
-      } else {
-        const conc = S[j] / (W[j] + 0.0001);
-        let sMove = -vol * conc;
-        if (sMove > S[j]) sMove = S[j];
-        dS[j] -= sMove; dS[i] += sMove;
-      }
-    }
-  }
-
-  for (let y = 0; y < N - 1; y++) {
-    const row = y * N;
-    for (let x = 0; x < N; x++) {
-      const i = row + x;
-      const f = fluxV[i];
-      if (f === 0) continue;
-      const j = i + N;
-      const vol = f * dt;
-      dW[i] -= vol; dW[j] += vol;
-      if (vol > 0) {
-        const conc = S[i] / (W[i] + 0.0001);
-        let sMove = vol * conc;
-        if (sMove > S[i]) sMove = S[i];
-        dS[i] -= sMove; dS[j] += sMove;
-      } else {
-        const conc = S[j] / (W[j] + 0.0001);
-        let sMove = -vol * conc;
-        if (sMove > S[j]) sMove = S[j];
-        dS[j] -= sMove; dS[i] += sMove;
-      }
-    }
-  }
-
-  for (let i = 0; i < N * N; i++) {
-    let w = W[i] + dW[i];
-    if (w < 0) w = 0;
-    W[i] = w;
-    let s = S[i] + dS[i];
-    if (s < 0) s = 0;
-    S[i] = s;
-  }
-}
-
-function simulateErosion(dt) {
-  const H = hmap, W = water, S = sed;
-  const eroRate = baseErosion * erosionMultiplier;
-  const Kc = baseCapacity;
-
-  for (let y = 0; y < N; y++) {
-    const row = y * N;
-    for (let x = 0; x < N; x++) {
-      const i = row + x;
-      if (W[i] < 0.001) continue;
-
-      const xl = x > 0     ? H[i - 1] : H[i];
-      const xr = x < N - 1 ? H[i + 1] : H[i];
-      const yt = y > 0     ? H[i - N] : H[i];
-      const yb = y < N - 1 ? H[i + N] : H[i];
-      const gx = (xr - xl) * 0.5 * GRID;
-      const gy = (yb - yt) * 0.5 * GRID;
-      const slope = Math.sqrt(gx * gx + gy * gy);
-      if (slope < 0.0001) continue;
-
-      let totalFlux = 0;
-      if (x > 0)     totalFlux += Math.abs(fluxH[i - 1]);
-      if (x < N - 1) totalFlux += Math.abs(fluxH[i]);
-      if (y > 0)     totalFlux += Math.abs(fluxV[i - N]);
-      if (y < N - 1) totalFlux += Math.abs(fluxV[i]);
-      if (totalFlux < 0.0001) continue;
-
-      let capacity = Kc * totalFlux * slope;
-      if (capacity > 0.30) capacity = 0.30;
-
-      if (S[i] < capacity) {
-        let amount = (capacity - S[i]) * eroRate * dt;
-        const maxErode = H[i] * 0.02;
-        if (amount > maxErode) amount = maxErode;
-        if (amount > 0) { H[i] -= amount; S[i] += amount; }
-      } else {
-        let amount = (S[i] - capacity) * 0.5 * dt;
-        if (amount > 0.01) amount = 0.01;
-        if (amount > 0) { H[i] += amount; S[i] -= amount; }
-      }
-      if (H[i] < 0) H[i] = 0;
-      if (H[i] > 1) H[i] = 1;
-      if (S[i] < 0) S[i] = 0;
-    }
-  }
-}
-
-function simulate(dt) {
-  if (dt <= 0) return;
-  const rain = baseRain * rainMultiplier * dt;
-  if (rain > 0) {
-    for (let i = 0; i < water.length; i++) water[i] += rain;
-  }
-  computeFlux();
-  applyFlux(dt);
-  simulateErosion(dt);
-
-  const evapF = 1 - baseEvap * dt;
-  for (let i = 0; i < water.length; i++) {
-    const w = water[i] * evapF;
-    water[i] = w < 0.0001 ? 0 : w;
-  }
 }
 
 /* ============================== 地形編輯 ============================== */
 function stampAt(gx, gy, dir) {
-  const Rr = brushRadius;
-  const R2 = Rr * Rr;
-  const amount = 0.055 / Rr * dir;
+  const R = brushRadius;
+  const R2 = R * R;
+  const amount = 0.055 / R * dir;
 
-  const x0 = Math.max(0, Math.floor(gx - Rr));
-  const x1 = Math.min(N - 1, Math.ceil(gx + Rr));
-  const y0 = Math.max(0, Math.floor(gy - Rr));
-  const y1 = Math.min(N - 1, Math.ceil(gy + Rr));
+  const x0 = Math.max(0, Math.floor(gx - R));
+  const x1 = Math.min(N - 1, Math.ceil(gx + R));
+  const y0 = Math.max(0, Math.floor(gy - R));
+  const y1 = Math.min(N - 1, Math.ceil(gy + R));
 
   for (let y = y0; y <= y1; y++) {
     const row = y * N;
@@ -1183,50 +1038,8 @@ function applyBrush(gx, gy, dir) {
     }
   }
   lastGrid = { x: gx, y: gy };
+  terrainDirty = true;
   needsContour = true;
-  needsDraw = true;
-}
-
-/* ============================== 建築拾取 ============================== */
-function pickCell(sx, sy) {
-  let best = -1;
-  let bestDist = Infinity;
-  let bestDepth = Infinity;
-
-  for (let y = 0; y < N; y += 2) {
-    const row = y * N;
-    for (let x = 0; x < N; x += 2) {
-      const h = hmap[row + x];
-      proj(x, y, h);
-      const dx = _px - sx, dy = _py - sy;
-      const d = dx * dx + dy * dy;
-      if (d < bestDist - 36 || (Math.abs(d - bestDist) <= 36 && _pd < bestDepth)) {
-        bestDist = d;
-        bestDepth = _pd;
-        best = row + x;
-      }
-    }
-  }
-  return best;
-}
-
-function pickBuilding(sx, sy) {
-  let best = -1;
-  let bestDist = Infinity;
-  for (let i = 0; i < buildings.length; i++) {
-    const b = buildings[i];
-    const gi = b.gy * N + b.gx;
-    const z = hmap[gi] + b.h * 0.5;
-    proj(b.gx, b.gy, z);
-    const dx = _px - sx, dy = _py - sy;
-    const d = dx * dx + dy * dy;
-    const pickR = Math.max(18, b.w * 1.6);
-    if (d < pickR * pickR && d < bestDist) {
-      bestDist = d;
-      best = i;
-    }
-  }
-  return best;
 }
 
 /* ============================== 事件 ============================== */
@@ -1238,80 +1051,43 @@ function canvasPos(e) {
   };
 }
 
-function placeBuilding(sx, sy) {
-  const idx = pickCell(sx, sy);
-  if (idx < 0) return;
-  const gx = idx % N, gy = (idx / N) | 0;
-
-  /* 檢查重複 */
-  for (let i = 0; i < buildings.length; i++) {
-    const b = buildings[i];
-    if (Math.abs(b.gx - gx) < brushRadius * 0.7 && Math.abs(b.gy - gy) < brushRadius * 0.7) return;
-  }
-
-  const color = BUILDING_COLORS[(Math.random() * BUILDING_COLORS.length) | 0];
-  buildings.push({
-    gx, gy,
-    h: 0.030 + Math.random() * 0.028,
-    w: brushRadius * 0.30,
-    color
-  });
-  needsDraw = true;
-}
-
 cv.addEventListener('pointerdown', (e) => {
+  updateViewParams();
   const p = canvasPos(e);
-  pointerPos = p;
+  pointerScreen = p;
   pointerInside = true;
-  updateProjection();
-
-  if (tool === 'build') {
-    placeBuilding(p.x, p.y);
-    return;
-  }
-  if (tool === 'remove') {
-    const bi = pickBuilding(p.x, p.y);
-    if (bi >= 0) {
-      buildings.splice(bi, 1);
-      needsDraw = true;
-    }
-    return;
-  }
-
-  /* 地形編輯 */
-  const gx = p.x, gy = p.y;
-  /* 逆投影：使用最近的格子 */
-  const idx = pickCell(gx, gy);
-  if (idx < 0) return;
-  const cgx = idx % N, cgy = (idx / N) | 0;
+  const g = screenToMap(p.x, p.y);
+  pointerMap = g;
 
   const dir = (e.shiftKey || e.button === 2 || tool === 'lower') ? -1 : 1;
   dragging = true;
   lastGrid = null;
   cv.setPointerCapture(e.pointerId);
-  applyBrush(cgx, cgy, dir);
+  applyBrush(g.x, g.y, dir);
+  needsDraw = true;
 });
 
 cv.addEventListener('pointermove', (e) => {
+  updateViewParams();
   const p = canvasPos(e);
-  pointerPos = p;
+  pointerScreen = p;
   pointerInside = true;
   needsDraw = true;
 
-  updateProjection();
-  const idx = pickCell(p.x, p.y);
-  if (idx >= 0) {
-    const alt = Math.round(hmap[idx] * 1000);
-    const dep = water[idx];
-    const depTxt = dep > 0.0005 ? ` · 水深 ${Math.round(dep * 1000)}` : '';
-    readout.textContent = `海拔 ${alt} m${depTxt}`;
-  }
+  const g = screenToMap(p.x, p.y);
+  pointerMap = g;
+
+  const ix = clamp(Math.round(g.x), 0, N - 1);
+  const iy = clamp(Math.round(g.y), 0, N - 1);
+  const idx = iy * N + ix;
+  const alt = Math.round(hmap[idx] * 1000);
+  const dep = water[idx];
+  const depTxt = dep > 0.0005 ? ` · 水深 ${Math.round(dep * 1000)}` : '';
+  readout.textContent = `海拔 ${alt} m${depTxt}`;
 
   if (dragging) {
     const dir = (e.shiftKey || (e.buttons & 2) || tool === 'lower') ? -1 : 1;
-    if (idx >= 0) {
-      applyBrush(idx % N, (idx / N) | 0, dir);
-    }
+    applyBrush(g.x, g.y, dir);
   }
 });
 
@@ -1325,71 +1101,59 @@ cv.addEventListener('contextmenu', (e) => e.preventDefault());
 /* ============================== UI 綁定 ============================== */
 const btnRaise = document.getElementById('btnRaise');
 const btnLower = document.getElementById('btnLower');
-const btnBuild = document.getElementById('btnBuild');
-const btnRemove = document.getElementById('btnRemove');
 
-function setTool(t) {
-  tool = t;
-  btnRaise.classList.toggle('on', t === 'raise');
-  btnLower.classList.toggle('on', t === 'lower');
-  btnBuild.classList.toggle('on', t === 'build');
-  btnRemove.classList.toggle('on', t === 'remove');
-  needsDraw = true;
-}
-btnRaise.onclick = () => setTool('raise');
-btnLower.onclick = () => setTool('lower');
-btnBuild.onclick = () => setTool('build');
-btnRemove.onclick = () => setTool('remove');
-
-/* 視角 */
-const rYaw = document.getElementById('rYaw');
-const vYaw = document.getElementById('vYaw');
-const rElev = document.getElementById('rElev');
-const vElev = document.getElementById('vElev');
-const rHS = document.getElementById('rHS');
-const vHS = document.getElementById('vHS');
-
-rYaw.oninput = () => {
-  viewYaw = +rYaw.value;
-  vYaw.textContent = viewYaw + '°';
+btnRaise.onclick = () => {
+  tool = 'raise';
+  btnRaise.classList.add('on');
+  btnLower.classList.remove('on');
   needsDraw = true;
 };
-rElev.oninput = () => {
-  viewElev = +rElev.value;
-  vElev.textContent = viewElev + '°';
-  needsDraw = true;
-};
-rHS.oninput = () => {
-  heightScale = +rHS.value;
-  vHS.textContent = heightScale.toFixed(1) + '×';
+btnLower.onclick = () => {
+  tool = 'lower';
+  btnLower.classList.add('on');
+  btnRaise.classList.remove('on');
   needsDraw = true;
 };
 
-/* 光照 */
-const rAz = document.getElementById('rAz');
-const vAz = document.getElementById('vAz');
-const rEl = document.getElementById('rEl');
-const vEl = document.getElementById('vEl');
-const rCon = document.getElementById('rCon');
-const vCon = document.getElementById('vCon');
+/* 視覺方向 */
+const rTilt = document.getElementById('rTilt');
+const vTilt = document.getElementById('vTilt');
+const rRot  = document.getElementById('rRot');
+const vRot  = document.getElementById('vRot');
+const rAz   = document.getElementById('rAz');
+const vAz   = document.getElementById('vAz');
+const rEl   = document.getElementById('rEl');
+const vEl   = document.getElementById('vEl');
+const rCon  = document.getElementById('rCon');
+const vCon  = document.getElementById('vCon');
 
+rTilt.oninput = () => {
+  tilt = +rTilt.value;
+  vTilt.textContent = tilt.toFixed(2);
+  needsDraw = true;
+};
+rRot.oninput = () => {
+  viewRotation = (+rRot.value) * Math.PI / 180;
+  vRot.textContent = rRot.value + '°';
+  needsDraw = true;
+};
 rAz.oninput = () => {
   lightAzimuth = +rAz.value;
   vAz.textContent = lightAzimuth + '°';
-  needsDraw = true;
+  terrainDirty = true;
 };
 rEl.oninput = () => {
   lightElevation = +rEl.value;
   vEl.textContent = lightElevation + '°';
-  needsDraw = true;
+  terrainDirty = true;
 };
 rCon.oninput = () => {
   shadowContrast = +rCon.value;
   vCon.textContent = shadowContrast.toFixed(2);
-  needsDraw = true;
+  terrainDirty = true;
 };
 
-/* 時間 */
+/* 時間控制 */
 const btnPlay = document.getElementById('btnPlay');
 btnPlay.onclick = () => {
   timeRunning = !timeRunning;
@@ -1399,9 +1163,8 @@ btnPlay.onclick = () => {
 
 document.getElementById('btnClearWater').onclick = () => {
   clearWater();
-  needsDraw = true;
+  terrainDirty = true;
 };
-
 document.getElementById('btnRand').onclick = () => {
   generateTerrain((Math.random() * 1e6) | 0);
 };
@@ -1445,18 +1208,17 @@ rStep.oninput = () => {
   contourStep = STEP_VALUES[+rStep.value];
   vStep.textContent = Math.round(contourStep * 1000);
   needsContour = true;
-  needsDraw = true;
 };
 
-ui.shade.onchange   = () => { needsDraw = true; };
-ui.contour.onchange = () => { needsDraw = true; };
+ui.shade.onchange   = () => { terrainDirty = true; };
+ui.contour.onchange = () => { sceneDirty = true; needsDraw = true; };
 ui.label.onchange   = () => { needsDraw = true; };
-ui.index.onchange   = () => { needsDraw = true; };
+ui.index.onchange   = () => { sceneDirty = true; needsDraw = true; };
 
 /* ============================== 尺寸 ============================== */
 function resizeCanvas() {
   const rect = stage.getBoundingClientRect();
-  const size = Math.max(260, Math.floor(Math.min(rect.width, rect.height) - 32));
+  const size = Math.max(220, Math.floor(Math.min(rect.width, rect.height) - 40));
   cw = ch = size;
 
   cv.style.width  = size + 'px';
@@ -1465,12 +1227,16 @@ function resizeCanvas() {
   cv.height = Math.round(size * dpr);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  updateViewParams();
+
+  needsContour = true;
   needsDraw = true;
 }
 window.addEventListener('resize', resizeCanvas);
 
 /* ============================== 主迴圈 ============================== */
 let lastTime = performance.now();
+let simTimeAccum = 0;
 
 function loop(now) {
   const realDt = Math.min(0.1, (now - lastTime) / 1000);
@@ -1483,6 +1249,7 @@ function loop(now) {
     for (let s = 0; s < steps; s++) simulate(simDt);
 
     simTimeAccum += totalDt;
+    terrainDirty = true;
     needsContour = true;
     needsDraw = true;
     statusEl.textContent = `時間 ${simTimeAccum.toFixed(1)}s · 流速 ${timeSpeed.toFixed(2)}×`;
@@ -1490,15 +1257,26 @@ function loop(now) {
     statusEl.textContent = '時間 —';
   }
 
+  if (terrainDirty) {
+    renderTerrain();
+    terrainDirty = false;
+  }
+
   if (needsContour) {
     contourSkip++;
-    const interval = timeRunning ? 5 : 1;
+    const interval = timeRunning ? 4 : 1;
     if (contourSkip >= interval) {
       buildContours();
       needsContour = false;
       contourSkip = 0;
-      needsDraw = true;
+      sceneDirty = true;
     }
+  }
+
+  if (sceneDirty) {
+    renderScene();
+    sceneDirty = false;
+    needsDraw = true;
   }
 
   if (needsDraw) {
@@ -1511,20 +1289,23 @@ function loop(now) {
 
 /* ============================== 啟動 ============================== */
 (function init() {
+  initTerrainImage();
   generateTerrain((Math.random() * 1e6) | 0);
   resizeCanvas();
 
-  vYaw.textContent  = viewYaw + '°';
-  vElev.textContent = viewElev + '°';
-  vHS.textContent   = heightScale.toFixed(1) + '×';
+  vTilt.textContent = tilt.toFixed(2);
+  vRot.textContent  = '0°';
   vAz.textContent   = lightAzimuth + '°';
   vEl.textContent   = lightElevation + '°';
   vCon.textContent  = shadowContrast.toFixed(2);
   vSpeed.textContent = timeSpeed.toFixed(2) + '×';
   vRain.textContent  = rainMultiplier.toFixed(1);
   vErosion.textContent = erosionMultiplier.toFixed(1);
-  vRadius.textContent = brushRadius;
   vStep.textContent  = Math.round(contourStep * 1000);
+
+  timeRunning = false;
+  btnPlay.classList.remove('on');
+  btnPlay.textContent = '▶ 開始';
 
   requestAnimationFrame(loop);
 })();
