@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>地理沙盆 · 局部降雨</title>
+<title>地理沙盆 · 流体模拟</title>
 <style>
   html, body, *, *::before, *::after {
     user-select: none !important;
@@ -79,7 +79,7 @@
 <div id="app">
   <aside id="panel">
     <h1>地理沙盆</h1>
-    <div class="sub">TOPOGRAPHIC SANDBOX · 局部降雨</div>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 淺水方程流體模擬</div>
 
     <!-- 視覺方向 -->
     <div class="group">
@@ -106,12 +106,14 @@
     <div class="group">
       <div class="lbl"><span>時間流速</span><span class="val" id="vSpeed">1.00×</span></div>
       <input type="range" id="rSpeed" min="0.25" max="4" value="1" step="0.25">
-      <div class="lbl"><span>降雨量</span><span class="val" id="vRain">1.0</span></div>
+      <div class="lbl"><span>全局降雨</span><span class="val" id="vRain">1.0</span></div>
       <input type="range" id="rRain" min="0" max="4" value="1" step="0.1">
       <div class="lbl"><span>侵蝕力</span><span class="val" id="vErosion">1.0</span></div>
       <input type="range" id="rErosion" min="0" max="3" value="1" step="0.1">
       <div class="lbl"><span>海平面</span><span class="val" id="vSea">430 m</span></div>
       <input type="range" id="rSea" min="0" max="800" value="430" step="5">
+      <div class="lbl"><span>水流粘度</span><span class="val" id="vVisc">1.8</span></div>
+      <input type="range" id="rVisc" min="0.5" max="4" value="1.8" step="0.1">
     </div>
 
     <!-- 地形 -->
@@ -156,7 +158,8 @@
     <div class="hint">
       <b>左鍵拖曳</b>抬升地形 · <b>Shift + 拖曳</b>或<b>右鍵</b>下陷<br>
       <b>降雨工具</b>：按住滑鼠在指定區域持續降雨。<br>
-      暫停時降雨仍會累積，開始時間後水流動沖刷。<br>
+      水採淺水方程模擬，有慣性、會匯聚沖刷。<br>
+      <b>水流粘度</b>越低，水越稀、慣性越大、流速越快。<br>
       <b>水位高度標示</b>會在水面顯示海拔數字。
     </div>
   </aside>
@@ -186,13 +189,12 @@ let cw = 640, ch = 640;
 let scale = 1;
 
 /* 地形與流體狀態 */
-let hmap    = new Float32Array(N * N);
-let water   = new Float32Array(N * N);
-let sed     = new Float32Array(N * N);
-let fluxH   = new Float32Array(N * N);
-let fluxV   = new Float32Array(N * N);
-const dW    = new Float32Array(N * N);
-const dS    = new Float32Array(N * N);
+let hmap    = new Float32Array(N * N);   // 地形高度 0~1
+let water   = new Float32Array(N * N);   // 水深 0~1
+let sed     = new Float32Array(N * N);   // 懸移質
+let velU    = new Float32Array(N * N);   // 水平速度（交錯網格：(i+0.5, j)）
+let velV    = new Float32Array(N * N);   // 垂直速度（交錯網格：(i, j+0.5)）
+const dW    = new Float32Array(N * N);   // 水深變化暫存
 
 /* 地形貼圖 */
 let terrainCanvas = document.createElement('canvas');
@@ -209,7 +211,7 @@ let contourSkip  = 0;
 let terrainDirty = true;
 
 /* 工具狀態 */
-let tool = 'raise';           // 'raise' | 'lower' | 'rain'
+let tool = 'raise';
 let brushRadius = 14;
 let pointerInside = false;
 let pointerPos = { x: 0, y: 0 };
@@ -219,7 +221,7 @@ let lastGrid = null;
 /* 局部降雨 */
 let isRaining = false;
 let rainBrushAmount = 1.0;
-let rainDrops = [];           // 雨滴粒子
+let rainDrops = [];
 
 /* 時間推進 */
 let timeRunning = false;
@@ -227,7 +229,7 @@ let timeSpeed   = 1.0;
 let rainMultiplier    = 1.0;
 let erosionMultiplier = 1.0;
 
-/* 海平面（0~1 高度單位，UI 顯示為 0~1000 m） */
+/* 海平面（0~1 高度單位） */
 let seaLevel = 0.43;
 
 /* 視覺方向 */
@@ -236,11 +238,17 @@ let lightElevation = 45;
 let shadowContrast = 0.70;
 let viewRotation   = 0;
 
+/* 流體參數 */
+const G_ACCEL     = 12.0;    // 視覺重力加速度（格/秒²）
+const MAX_SPEED   = 22.0;    // 速度上限（格/秒）
+const DRY_THRESH   = 0.0004; // 乾格閾值
+let   frictionK    = 1.8;    // 摩擦係數（1/秒），由 UI 控制
+const MAX_SUB_DT   = 0.03;   // 每子步最大 dt
+
 /* 模擬常數 */
 const baseRain     = 0.0030;
-const flowK        = 3.0;
 const baseErosion  = 2.0;
-const baseCapacity = 12.0;
+const baseCapacity = 0.04;   // 速度×坡度搬運係數
 const baseEvap     = 0.004;
 
 /* 顯示開關 */
@@ -366,13 +374,13 @@ function fillOcean() {
 function clearWater() {
   water.fill(0);
   sed.fill(0);
-  fluxH.fill(0);
-  fluxV.fill(0);
+  velU.fill(0);
+  velV.fill(0);
   rainDrops.length = 0;
   needsDraw = true;
 }
 
-/* ============================== 地形貼圖（動態光照 + 水體） ============================== */
+/* ============================== 地形貼圖（動態光照 + 水體 + 速度高光） ============================== */
 function initTerrainImage() {
   terrainCanvas.width  = N;
   terrainCanvas.height = N;
@@ -393,7 +401,7 @@ function renderTerrain() {
   const ambient  = 0.5;
   const strength = shadowContrast;
 
-  const H = hmap, W = water, S = sed;
+  const H = hmap, W = water, S = sed, U = velU, V = velV;
 
   for (let y = 0; y < N; y++) {
     const row = y * N;
@@ -421,7 +429,7 @@ function renderTerrain() {
         r *= sh; g *= sh; b *= sh;
       }
 
-      /* ---- 水體混色（青藍半透明，與灰綠地形區分） ---- */
+      /* ---- 水體混色 ---- */
       const w = W[i];
       if (w > 0.005) {
         let wf = Math.sqrt(w) * 3.2;
@@ -432,6 +440,7 @@ function renderTerrain() {
         let wg = 210 - 80 * deep;
         let wb = 240 - 30 * deep;
 
+        /* 沉積物濁度 */
         const s = S[i];
         if (s > 0.0003) {
           let cc = s / (w + 0.001) * 5;
@@ -439,6 +448,22 @@ function renderTerrain() {
           wr = wr * (1 - cc) + 170 * cc;
           wg = wg * (1 - cc) + 150 * cc;
           wb = wb * (1 - cc) + 110 * cc;
+        }
+
+        /* 速度高光：快速水流顯示白色泡沫 */
+        const uL = x > 0    ? U[i - 1] : 0;
+        const uR = x < GRID ? U[i]     : 0;
+        const vT = y > 0    ? V[i - N] : 0;
+        const vB = y < GRID ? V[i]     : 0;
+        const uc = (uL + uR) * 0.5;
+        const vc = (vT + vB) * 0.5;
+        const speed = Math.sqrt(uc * uc + vc * vc);
+
+        if (speed > 0.8) {
+          const foam = Math.min(1, (speed - 0.8) * 0.22);
+          wr = wr * (1 - foam) + 245 * foam;
+          wg = wg * (1 - foam) + 250 * foam;
+          wb = wb * (1 - foam) + 255 * foam;
         }
 
         const blend = wf * 0.80;
@@ -463,120 +488,137 @@ function renderTerrain() {
   needsDraw = true;
 }
 
-/* ============================== 水流模擬 ============================== */
-function computeFlux() {
+/* ============================== 淺水方程流體模擬 ============================== */
+
+/* 1. 重力驅動速度（壓力梯度） */
+function updateVelocityFromGravity(dt) {
   const H = hmap, W = water;
-  for (let y = 0; y < N; y++) {
-    const row = y * N;
-    for (let x = 0; x < N; x++) {
-      const i = row + x;
 
-      if (x < N - 1) {
-        const j = i + 1;
-        const dh = (H[i] + W[i]) - (H[j] + W[j]);
-        let f = flowK * dh;
-        if (f > 0) {
-          const cap = W[i] * 0.25;
-          if (f > cap) f = cap;
-        } else if (f < 0) {
-          const cap = W[j] * 0.25;
-          if (f < -cap) f = -cap;
-        }
-        fluxH[i] = f;
+  /* 水平速度 u[i,j] 位於 (i+0.5, j)，比較格子 i 與 i+1 */
+  for (let j = 0; j < N; j++) {
+    const row = j * N;
+    for (let i = 0; i < N - 1; i++) {
+      const idx = row + i;
+      const sL = H[idx]     + W[idx];
+      const sR = H[idx + 1] + W[idx + 1];
+      let nu = velU[idx] - G_ACCEL * (sR - sL) * dt;
+      if (nu >  MAX_SPEED) nu =  MAX_SPEED;
+      if (nu < -MAX_SPEED) nu = -MAX_SPEED;
+      velU[idx] = nu;
+    }
+    velU[row + N - 1] = 0;  /* 右邊界封閉 */
+  }
+
+  /* 垂直速度 v[i,j] 位於 (i, j+0.5)，比較格子 j 與 j+1 */
+  for (let j = 0; j < N - 1; j++) {
+    const row = j * N;
+    for (let i = 0; i < N; i++) {
+      const idx = row + i;
+      const sT = H[idx]     + W[idx];
+      const sB = H[idx + N] + W[idx + N];
+      let nv = velV[idx] - G_ACCEL * (sB - sT) * dt;
+      if (nv >  MAX_SPEED) nv =  MAX_SPEED;
+      if (nv < -MAX_SPEED) nv = -MAX_SPEED;
+      velV[idx] = nv;
+    }
+  }
+  /* 下邊界封閉 */
+  const lastRow = (N - 1) * N;
+  for (let i = 0; i < N; i++) velV[lastRow + i] = 0;
+}
+
+/* 2. 摩擦 + 乾格阻尼 */
+function applyFrictionAndDry(dt) {
+  const f = Math.exp(-frictionK * dt);
+  const W = water;
+  const dry = 0.0006;
+
+  for (let j = 0; j < N; j++) {
+    const row = j * N;
+    for (let i = 0; i < N - 1; i++) {
+      const idx = row + i;
+      if (W[idx] < dry && W[idx + 1] < dry) {
+        velU[idx] *= 0.35;
       } else {
-        fluxH[i] = 0;
+        velU[idx] *= f;
       }
+    }
+  }
 
-      if (y < N - 1) {
-        const j = i + N;
-        const dh = (H[i] + W[i]) - (H[j] + W[j]);
-        let f = flowK * dh;
-        if (f > 0) {
-          const cap = W[i] * 0.25;
-          if (f > cap) f = cap;
-        } else if (f < 0) {
-          const cap = W[j] * 0.25;
-          if (f < -cap) f = -cap;
-        }
-        fluxV[i] = f;
+  for (let j = 0; j < N - 1; j++) {
+    const row = j * N;
+    for (let i = 0; i < N; i++) {
+      const idx = row + i;
+      if (W[idx] < dry && W[idx + N] < dry) {
+        velV[idx] *= 0.35;
       } else {
-        fluxV[i] = 0;
+        velV[idx] *= f;
       }
     }
   }
 }
 
-function applyFlux(dt) {
+/* 3. 連續性方程：用速度通量更新水深（保證水量守恆、不負水深） */
+function updateWaterDepth(dt) {
+  const W = water;
   dW.fill(0);
-  dS.fill(0);
-  const W = water, S = sed;
 
-  for (let y = 0; y < N; y++) {
-    const row = y * N;
-    for (let x = 0; x < N - 1; x++) {
-      const i = row + x;
-      const f = fluxH[i];
-      if (f === 0) continue;
-      const j = i + 1;
-      const vol = f * dt;
-      dW[i] -= vol;
-      dW[j] += vol;
+  /* 水平通量 */
+  for (let j = 0; j < N; j++) {
+    const row = j * N;
+    for (let i = 0; i < N - 1; i++) {
+      const idx = row + i;
+      const speed = velU[idx];
+      if (speed > -1e-6 && speed < 1e-6) continue;
 
-      if (vol > 0) {
-        const conc = S[i] / (W[i] + 0.0001);
-        let sMove = vol * conc;
-        if (sMove > S[i]) sMove = S[i];
-        dS[i] -= sMove;
-        dS[j] += sMove;
+      /* 上游水深 */
+      const hUp = speed > 0 ? W[idx] : W[idx + 1];
+      let Q = speed * hUp * dt;
+
+      /* 限制：不能流超過源格子的水 */
+      if (Q > 0) {
+        if (Q > W[idx])     Q = W[idx];
       } else {
-        const conc = S[j] / (W[j] + 0.0001);
-        let sMove = -vol * conc;
-        if (sMove > S[j]) sMove = S[j];
-        dS[j] -= sMove;
-        dS[i] += sMove;
+        if (Q < -W[idx + 1]) Q = -W[idx + 1];
       }
+
+      dW[idx]     -= Q;
+      dW[idx + 1] += Q;
     }
   }
 
-  for (let y = 0; y < N - 1; y++) {
-    const row = y * N;
-    for (let x = 0; x < N; x++) {
-      const i = row + x;
-      const f = fluxV[i];
-      if (f === 0) continue;
-      const j = i + N;
-      const vol = f * dt;
-      dW[i] -= vol;
-      dW[j] += vol;
+  /* 垂直通量 */
+  for (let j = 0; j < N - 1; j++) {
+    const row = j * N;
+    for (let i = 0; i < N; i++) {
+      const idx = row + i;
+      const speed = velV[idx];
+      if (speed > -1e-6 && speed < 1e-6) continue;
 
-      if (vol > 0) {
-        const conc = S[i] / (W[i] + 0.0001);
-        let sMove = vol * conc;
-        if (sMove > S[i]) sMove = S[i];
-        dS[i] -= sMove;
-        dS[j] += sMove;
+      const hUp = speed > 0 ? W[idx] : W[idx + N];
+      let Q = speed * hUp * dt;
+
+      if (Q > 0) {
+        if (Q > W[idx])     Q = W[idx];
       } else {
-        const conc = S[j] / (W[j] + 0.0001);
-        let sMove = -vol * conc;
-        if (sMove > S[j]) sMove = S[j];
-        dS[j] -= sMove;
-        dS[i] += sMove;
+        if (Q < -W[idx + N]) Q = -W[idx + N];
       }
+
+      dW[idx]     -= Q;
+      dW[idx + N] += Q;
     }
   }
 
+  /* 應用水深變化 */
   for (let i = 0; i < N * N; i++) {
     let w = W[i] + dW[i];
-    if (w < 0) w = 0;
-    W[i] = w;
-    let s = S[i] + dS[i];
-    if (s < 0) s = 0;
-    S[i] = s;
+    W[i] = w < 0 ? 0 : w;
   }
 }
 
+/* 4. 侵蝕 / 沉積：由流速驅動 */
 function simulateErosion(dt) {
-  const H = hmap, W = water, S = sed;
+  const H = hmap, W = water, S = sed, U = velU, V = velV;
   const eroRate = baseErosion * erosionMultiplier;
   const Kc = baseCapacity;
 
@@ -584,9 +626,19 @@ function simulateErosion(dt) {
     const row = y * N;
     for (let x = 0; x < N; x++) {
       const i = row + x;
-      const w = W[i];
-      if (w < 0.001) continue;
+      if (W[i] < 0.001) continue;
 
+      /* 格心速度（取周圍面速度平均） */
+      const uL = x > 0     ? U[i - 1] : 0;
+      const uR = x < N - 1 ? U[i]     : 0;
+      const vT = y > 0     ? V[i - N] : 0;
+      const vB = y < N - 1 ? V[i]     : 0;
+      const uc = (uL + uR) * 0.5;
+      const vc = (vT + vB) * 0.5;
+      const speed = Math.sqrt(uc * uc + vc * vc);
+      if (speed < 0.02) continue;
+
+      /* 坡度 */
       const xl = x > 0     ? H[i - 1] : H[i];
       const xr = x < N - 1 ? H[i + 1] : H[i];
       const yt = y > 0     ? H[i - N] : H[i];
@@ -596,22 +648,18 @@ function simulateErosion(dt) {
       const slope = Math.sqrt(gx * gx + gy * gy);
       if (slope < 0.0001) continue;
 
-      let totalFlux = 0;
-      if (x > 0)     totalFlux += Math.abs(fluxH[i - 1]);
-      if (x < N - 1) totalFlux += Math.abs(fluxH[i]);
-      if (y > 0)     totalFlux += Math.abs(fluxV[i - N]);
-      if (y < N - 1) totalFlux += Math.abs(fluxV[i]);
-      if (totalFlux < 0.0001) continue;
-
-      let capacity = Kc * totalFlux * slope;
+      /* 搬運能力：流速越快、坡度越陡，搬運越多 */
+      let capacity = Kc * speed * slope;
       if (capacity > 0.30) capacity = 0.30;
 
       if (S[i] < capacity) {
+        /* 侵蝕 */
         let amount = (capacity - S[i]) * eroRate * dt;
         const maxErode = H[i] * 0.02;
         if (amount > maxErode) amount = maxErode;
         if (amount > 0) { H[i] -= amount; S[i] += amount; }
       } else {
+        /* 沉積 */
         let amount = (S[i] - capacity) * 0.5 * dt;
         if (amount > 0.01) amount = 0.01;
         if (amount > 0) { H[i] += amount; S[i] -= amount; }
@@ -624,18 +672,28 @@ function simulateErosion(dt) {
   }
 }
 
+/* 完整流體步進 */
+function stepWater(dt) {
+  updateVelocityFromGravity(dt);
+  applyFrictionAndDry(dt);
+  updateWaterDepth(dt);
+  simulateErosion(dt);
+}
+
+/* ============================== 主模擬 ============================== */
 function simulate(dt) {
   if (dt <= 0) return;
 
+  /* 全局降雨 */
   const rain = baseRain * rainMultiplier * dt;
   if (rain > 0) {
     for (let i = 0; i < water.length; i++) water[i] += rain;
   }
 
-  computeFlux();
-  applyFlux(dt);
-  simulateErosion(dt);
+  /* 流體步進 */
+  stepWater(dt);
 
+  /* 蒸發 */
   const evapF = 1 - baseEvap * dt;
   for (let i = 0; i < water.length; i++) {
     const w = water[i] * evapF;
@@ -644,7 +702,7 @@ function simulate(dt) {
 }
 
 /* ============================== 局部降雨 ============================== */
-const RAIN_MAX_WATER = 0.45;   // 局部降雨的水量上限，防止無限累積
+const RAIN_MAX_WATER = 0.45;
 
 function rainAt(gx, gy, dt) {
   const R = brushRadius;
@@ -1179,7 +1237,6 @@ cv.addEventListener('pointerdown', (e) => {
     isRaining = true;
     dragging = false;
     lastGrid = null;
-    // 立即降雨一次，讓點擊有即時回饋
     const rainDt = timeRunning ? 0.05 * timeSpeed : 0.05;
     rainAt(g.x, g.y, rainDt);
     for (let i = 0; i < 6; i++) spawnRainDrop();
@@ -1208,9 +1265,7 @@ cv.addEventListener('pointermove', (e) => {
   const depTxt = dep > 0.0005 ? ` · 水深 ${Math.round(dep * 1000)}` : '';
   readout.textContent = `海拔 ${alt} m${depTxt}`;
 
-  if (isRaining && tool === 'rain') {
-    // 位置已更新，降雨在 loop 中處理
-  } else if (dragging) {
+  if (dragging) {
     const dir = (e.shiftKey || (e.buttons & 2) || tool === 'lower') ? -1 : 1;
     applyBrush(g.x, g.y, dir);
   }
@@ -1237,7 +1292,6 @@ function selectTool(t) {
   btnRaise.classList.toggle('on', t === 'raise');
   btnLower.classList.toggle('on', t === 'lower');
   btnRain.classList.toggle('on',  t === 'rain');
-  // 切換工具時中斷目前的拖曳 / 降雨
   dragging = false;
   isRaining = false;
   lastGrid = null;
@@ -1254,6 +1308,14 @@ const vRainBrush = document.getElementById('vRainBrush');
 rRainBrush.oninput = () => {
   rainBrushAmount = +rRainBrush.value;
   vRainBrush.textContent = rainBrushAmount.toFixed(1);
+};
+
+/* 水流粘度 */
+const rVisc = document.getElementById('rVisc');
+const vVisc = document.getElementById('vVisc');
+rVisc.oninput = () => {
+  frictionK = +rVisc.value;
+  vVisc.textContent = frictionK.toFixed(1);
 };
 
 /* 視覺方向 */
@@ -1392,7 +1454,7 @@ function loop(now) {
   const realDt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
-  /* ---- 局部降雨（不管是否暫停都有效） ---- */
+  /* ---- 局部降雨（暫停時也累積） ---- */
   if (isRaining && tool === 'rain' && pointerInside) {
     const gx = pointerPos.x / scale;
     const gy = pointerPos.y / scale;
@@ -1405,10 +1467,10 @@ function loop(now) {
   updateRainDrops(realDt);
   if (rainDrops.length > 0) needsDraw = true;
 
-  /* ---- 時間推進 ---- */
+  /* ---- 時間推進（淺水方程需小 dt 保穩定） ---- */
   if (timeRunning) {
-    const totalDt = Math.min(0.1, realDt * timeSpeed);
-    const steps = Math.max(1, Math.min(3, Math.ceil(totalDt / 0.03)));
+    const totalDt = Math.min(0.06, realDt * timeSpeed);
+    const steps = Math.max(1, Math.ceil(totalDt / MAX_SUB_DT));
     const simDt = totalDt / steps;
     for (let s = 0; s < steps; s++) simulate(simDt);
 
@@ -1461,6 +1523,7 @@ function loop(now) {
   vStep.textContent  = Math.round(contourStep * 1000);
   vSea.textContent   = Math.round(seaLevel * 1000) + ' m';
   vRainBrush.textContent = rainBrushAmount.toFixed(1);
+  vVisc.textContent  = frictionK.toFixed(1);
   rSea.value = Math.round(seaLevel * 1000);
 
   timeRunning = false;
