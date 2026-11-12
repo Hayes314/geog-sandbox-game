@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>地理沙盆 · 水流、時間與視覺方向</title>
+<style>
+  html, body, *, *::before, *::after {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-drag: none !important;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;overflow:hidden;
+    font-family:system-ui,-apple-system,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+    background:#0d1117;color:#c9d4e2;
+  }
+  #app{display:flex;height:100%}
+  #panel{
+    width:282px;flex:0 0 282px;height:100%;overflow-y:auto;
+    background:linear-gradient(180deg,#161c25,#11161e);
+    border-right:1px solid #232c38;padding:16px 16px 40px;
+  }
+  #panel::-webkit-scrollbar{width:8px}
+  #panel::-webkit-scrollbar-thumb{background:#2b3644;border-radius:4px}
+  h1{font-size:15px;margin:0 0 2px;letter-spacing:.08em;color:#eaf2ff}
+  .sub{font-size:11px;color:#6b7d92;margin-bottom:16px;letter-spacing:.05em}
+  .group{margin-bottom:15px}
+  .group>label.t{
+    display:block;font-size:11px;letter-spacing:.14em;
+    color:#7f93aa;margin-bottom:7px;text-transform:uppercase;
+  }
+  .lbl{
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:11px;color:#7f93aa;margin:9px 0 3px;letter-spacing:.05em;
+  }
+  .lbl:first-of-type{margin-top:2px}
+  .row{display:flex;gap:7px;flex-wrap:wrap}
+  button{
+    flex:1 1 auto;min-width:72px;padding:8px 10px;font-size:12px;
+    color:#cfe0f3;background:#1e2836;border:1px solid #2e3c4e;
+    border-radius:7px;cursor:pointer;transition:.15s;font-family:inherit;
+  }
+  button:hover{background:#27374b;border-color:#3d5470;color:#fff}
+  button:active{transform:translateY(1px)}
+  button.on{background:#2b6a8f;border-color:#3f93c4;color:#fff;box-shadow:0 0 12px #2b6a8f66}
+  button.play{background:#1d5a3a;border-color:#2d8157}
+  button.play.on{background:#8f2b2b;border-color:#c43f3f;box-shadow:0 0 12px #8f2b2b66}
+  input[type=range]{width:100%;accent-color:#4aa3d8;height:18px;cursor:pointer}
+  .chk{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;cursor:pointer;color:#b7c6d8}
+  .chk input{accent-color:#4aa3d8;width:15px;height:15px;cursor:pointer}
+  .chk:hover{color:#fff}
+  .val{color:#5fb4e8;font-variant-numeric:tabular-nums;letter-spacing:0}
+  .hint{font-size:11px;line-height:1.7;color:#5f7186;border-top:1px solid #212b37;padding-top:12px}
+  .hint b{color:#8fa7c0;font-weight:600}
+  #stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;background:
+    radial-gradient(circle at 50% 45%,#17202b 0%,#0b0f15 70%)}
+  canvas{display:block;border-radius:8px;box-shadow:0 14px 50px #000a,0 0 0 1px #2a3646;cursor:crosshair;touch-action:none}
+  #readout{
+    position:absolute;left:14px;bottom:12px;font-size:11px;color:#7d93aa;
+    font-variant-numeric:tabular-nums;letter-spacing:.06em;pointer-events:none;
+    background:#0d131bcc;padding:5px 10px;border-radius:6px;border:1px solid #1e2833;
+  }
+  #status{
+    position:absolute;right:14px;bottom:12px;font-size:11px;color:#7d93aa;
+    font-variant-numeric:tabular-nums;letter-spacing:.06em;pointer-events:none;
+    background:#0d131bcc;padding:5px 10px;border-radius:6px;border:1px solid #1e2833;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>地理沙盆</h1>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 視覺方向</div>
+
+    <!-- 視覺方向 -->
+    <div class="group">
+      <label class="t">視覺方向</label>
+      <div class="lbl"><span>光照方位</span><span class="val" id="vAz">315°</span></div>
+      <input type="range" id="rAz" min="0" max="360" value="315" step="1">
+      <div class="lbl"><span>光照仰角</span><span class="val" id="vEl">45°</span></div>
+      <input type="range" id="rEl" min="5" max="85" value="45" step="1">
+      <div class="lbl"><span>陰影對比</span><span class="val" id="vCon">0.70</span></div>
+      <input type="range" id="rCon" min="0" max="1.2" value="0.7" step="0.02">
+      <div class="lbl"><span>視圖旋轉</span><span class="val" id="vRot">0°</span></div>
+      <input type="range" id="rRot" min="0" max="360" value="0" step="1">
+    </div>
+
+    <!-- 時間控制 -->
+    <div class="group">
+      <label class="t">時間推進</label>
+      <div class="row">
+        <button id="btnPlay" class="play">▶ 開始</button>
+        <button id="btnClearWater">清除水</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="lbl"><span>時間流速</span><span class="val" id="vSpeed">1.00×</span></div>
+      <input type="range" id="rSpeed" min="0.25" max="4" value="1" step="0.25">
+      <div class="lbl"><span>降雨量</span><span class="val" id="vRain">1.0</span></div>
+      <input type="range" id="rRain" min="0" max="4" value="1" step="0.1">
+      <div class="lbl"><span>侵蝕力</span><span class="val" id="vErosion">1.0</span></div>
+      <input type="range" id="rErosion" min="0" max="3" value="1" step="0.1">
+    </div>
+
+    <!-- 地形 -->
+    <div class="group">
+      <label class="t">地形</label>
+      <div class="row">
+        <button id="btnRand">隨機地形</button>
+        <button id="btnFlat">平坦重置</button>
+      </div>
+    </div>
+
+    <!-- 工具 -->
+    <div class="group">
+      <label class="t">工具</label>
+      <div class="row">
+        <button id="btnRaise" class="on">抬升 ▲</button>
+        <button id="btnLower">下陷 ▼</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="lbl"><span>筆刷半徑</span><span class="val" id="vRadius">14</span></div>
+      <input type="range" id="rRadius" min="3" max="40" value="14" step="1">
+      <div class="lbl"><span>等高距</span><span class="val" id="vStep">25</span></div>
+      <input type="range" id="rStep" min="0" max="4" value="2" step="1">
+    </div>
+
+    <div class="group">
+      <label class="t">顯示</label>
+      <label class="chk"><input type="checkbox" id="cContour" checked>等高線</label>
+      <label class="chk"><input type="checkbox" id="cLabel" checked>高度標註</label>
+      <label class="chk"><input type="checkbox" id="cShade" checked>山體陰影</label>
+      <label class="chk"><input type="checkbox" id="cIndex" checked>計曲線加粗</label>
+    </div>
+
+    <div class="hint">
+      <b>左鍵拖曳</b>抬升地形<br>
+      <b>Shift + 拖曳</b>或<b>右鍵拖曳</b>下陷地形<br>
+      右上角羅盤顯示目前光源方向。<br>
+      <b>視圖旋轉</b>會旋轉整張地圖，方便從不同方位觀察。
+    </div>
+  </aside>
+
+  <main id="stage">
+    <canvas id="cv"></canvas>
+    <div id="readout">海拔 — m</div>
+    <div id="status">時間 —</div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+/* ============================== 基本設定 ============================== */
+const N = 160;
+const GRID = N - 1;
+const SEA = 0.43;
+
+const cv      = document.getElementById('cv');
+const ctx     = cv.getContext('2d');
+const stage   = document.getElementById('stage');
+const readout = document.getElementById('readout');
+const statusEl= document.getElementById('status');
+
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+let cw = 640, ch = 640;
+let scale = 1;
+
+/* 地形與流體狀態 */
+let hmap    = new Float32Array(N * N);
+let water   = new Float32Array(N * N);
+let sed     = new Float32Array(N * N);
+let fluxH   = new Float32Array(N * N);
+let fluxV   = new Float32Array(N * N);
+const dW    = new Float32Array(N * N);
+const dS    = new Float32Array(N * N);
+
+/* 地形貼圖 */
+let terrainCanvas = document.createElement('canvas');
+let terrainCtx    = terrainCanvas.getContext('2d');
+let terrainImage  = null;
+let terrainPixels = null;
+
+/* 等高線 */
+let contours = [];
+let contourStep = 0.025;
+let needsContour = true;
+let needsDraw    = true;
+let contourSkip  = 0;
+let terrainDirty = true;
+
+/* 工具狀態 */
+let tool = 'raise';
+let brushRadius = 14;
+let pointerInside = false;
+let pointerPos = { x: 0, y: 0 };
+let dragging = false;
+let lastGrid = null;
+
+/* 時間推進 */
+let timeRunning = false;
+let timeSpeed   = 1.0;
+let rainMultiplier    = 1.0;
+let erosionMultiplier = 1.0;
+
+/* 視覺方向 */
+let lightAzimuth   = 315;      // 度，0 = 北（螢幕上方），順時針
+let lightElevation = 45;       // 度
+let shadowContrast = 0.70;     // 漫反射強度
+let viewRotation   = 0;        // 弧度
+
+/* 模擬常數 */
+const baseRain     = 0.0030;
+const flowK        = 3.0;
+const baseErosion  = 2.0;
+const baseCapacity = 12.0;
+const baseEvap     = 0.010;
+
+/* 顯示開關 */
+const ui = {
+  contour: document.getElementById('cContour'),
+  label:   document.getElementById('cLabel'),
+  shade:   document.getElementById('cShade'),
+  index:   document.getElementById('cIndex'),
+};
+
+/* ============================== 雜訊 ============================== */
+function hash2(x, y, seed) {
+  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^ Math.imul(seed, 0x9e3779b1);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise(x, y, seed) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi,     yi,     seed);
+  const b = hash2(xi + 1, yi,     seed);
+  const c = hash2(xi,     yi + 1, seed);
+  const d = hash2(xi + 1, yi + 1, seed);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x, y, seed, oct) {
+  let amp = 0.5, freq = 1, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    sum  += amp * vnoise(x * freq, y * freq, seed + i * 131);
+    norm += amp;
+    amp  *= 0.5;
+    freq *= 2;
+  }
+  return sum / norm;
+}
+
+/* ============================== 色階 ============================== */
+const STOPS = [
+  [0.00, [  8,  24,  48]],
+  [0.20, [ 16,  52,  96]],
+  [0.34, [ 30,  92, 140]],
+  [0.41, [ 62, 132, 176]],
+  [0.435,[ 96, 170, 192]],
+  [0.452,[222, 210, 160]],
+  [0.480,[198, 198, 138]],
+  [0.530,[124, 168,  92]],
+  [0.630,[ 74, 132,  66]],
+  [0.720,[108, 116,  76]],
+  [0.810,[140, 130, 110]],
+  [0.890,[178, 172, 164]],
+  [0.950,[236, 237, 242]],
+  [1.00, [255, 255, 255]],
+];
+const LUT_N = 512;
+const lut = new Uint8Array(LUT_N * 3);
+(function buildLUT() {
+  for (let i = 0; i < LUT_N; i++) {
+    const t = i / (LUT_N - 1);
+    let a = STOPS[0], b = STOPS[STOPS.length - 1];
+    for (let s = 0; s < STOPS.length - 1; s++) {
+      if (t >= STOPS[s][0] && t <= STOPS[s + 1][0]) { a = STOPS[s]; b = STOPS[s + 1]; break; }
+    }
+    const f = (t - a[0]) / Math.max(1e-9, b[0] - a[0]);
+    lut[i * 3]     = a[1][0] + (b[1][0] - a[1][0]) * f;
+    lut[i * 3 + 1] = a[1][1] + (b[1][1] - a[1][1]) * f;
+    lut[i * 3 + 2] = a[1][2] + (b[1][2] - a[1][2]) * f;
+  }
+})();
+
+/* ============================== 地形生成 ============================== */
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+function generateTerrain(seed) {
+  const freq = 2.7;
+  for (let y = 0; y < N; y++) {
+    const ny = y / GRID;
+    for (let x = 0; x < N; x++) {
+      const nx = x / GRID;
+      let v = fbm(nx * freq, ny * freq, seed, 6);
+      v = 0.56 + (v - 0.5) * 1.85;
+      const dx = nx * 2 - 1, dy = ny * 2 - 1;
+      const d = Math.sqrt(dx * dx + dy * dy) / 1.41421356;
+      const mask = 1 - Math.pow(Math.min(1, d), 2.6);
+      v = v * mask + 0.08 * (1 - mask);
+      hmap[y * N + x] = clamp(v, 0, 1);
+    }
+  }
+  clearWater();
+  renderTerrain();
+  needsContour = true;
+}
+
+function flattenTerrain() {
+  const seed = (Math.random() * 1e6) | 0;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const n = vnoise(x * 0.06, y * 0.06, seed) * 0.03;
+      hmap[y * N + x] = 0.50 + n;
+    }
+  }
+  clearWater();
+  renderTerrain();
+  needsContour = true;
+}
+
+function clearWater() {
+  water.fill(0);
+  sed.fill(0);
+  fluxH.fill(0);
+  fluxV.fill(0);
+  needsDraw = true;
+}
+
+/* ============================== 地形貼圖（動態光照） ============================== */
+function initTerrainImage() {
+  terrainCanvas.width  = N;
+  terrainCanvas.height = N;
+  terrainImage  = terrainCtx.createImageData(N, N);
+  terrainPixels = terrainImage.data;
+  for (let i = 3; i < terrainPixels.length; i += 4) terrainPixels[i] = 255;
+}
+
+function renderTerrain() {
+  const px = terrainPixels;
+  const shading = ui.shade.checked;
+
+  /* 依方位角與仰角計算光源向量 */
+  const azRad = lightAzimuth   * Math.PI / 180;
+  const elRad = lightElevation * Math.PI / 180;
+  const lx =  Math.sin(azRad) * Math.cos(elRad);
+  const ly = -Math.cos(azRad) * Math.cos(elRad);
+  const lz =  Math.sin(elRad);
+  const ambient  = 0.5;
+  const strength = shadowContrast;
+
+  const H = hmap, W = water, S = sed;
+
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+      const h = H[i];
+
+      let ci = (h * (LUT_N - 1)) | 0;
+      if (ci < 0) ci = 0; else if (ci >= LUT_N) ci = LUT_N - 1;
+      let r = lut[ci * 3], g = lut[ci * 3 + 1], b = lut[ci * 3 + 2];
+
+      if (shading) {
+        const xl = x > 0     ? H[i - 1] : h;
+        const xr = x < GRID  ? H[i + 1] : h;
+        const yt = y > 0     ? H[i - N] : h;
+        const yb = y < GRID  ? H[i + N] : h;
+        const dzdx = (xr - xl) * 62;
+        const dzdy = (yb - yt) * 62;
+        const inv  = 1 / Math.sqrt(dzdx * dzdx + dzdy * dzdy + 1);
+        const nx = -dzdx * inv, ny = -dzdy * inv, nz = inv;
+        let dot = nx * lx + ny * ly + nz * lz;
+        if (dot < 0) dot = 0; else if (dot > 1) dot = 1;
+        let sh = ambient + strength * dot;
+        if (sh > 1.25) sh = 1.25;
+        r *= sh; g *= sh; b *= sh;
+      }
+
+      /* ---- 水體混色 ---- */
+      const w = W[i];
+      if (w > 0.0003) {
+        let wf = Math.sqrt(w) * 2.5;
+        if (wf > 1) wf = 1;
+        const deep = w * 10 > 1 ? 1 : w * 10;
+        let wr = 90 - 60 * deep;
+        let wg = 150 - 80 * deep;
+        let wb = 210 - 10 * deep;
+
+        const s = S[i];
+        if (s > 0.0003) {
+          let cc = s / (w + 0.001) * 5;
+          if (cc > 1) cc = 1;
+          wr = wr * (1 - cc) + 160 * cc;
+          wg = wg * (1 - cc) + 130 * cc;
+          wb = wb * (1 - cc) +  90 * cc;
+        }
+
+        const blend = wf * 0.85;
+        r = r * (1 - blend) + wr * blend;
+        g = g * (1 - blend) + wg * blend;
+        b = b * (1 - blend) + wb * blend;
+      }
+
+      const o = i * 4;
+      px[o]     = r > 255 ? 255 : r < 0 ? 0 : r;
+      px[o + 1] = g > 255 ? 255 : g < 0 ? 0 : g;
+      px[o + 2] = b > 255 ? 255 : b < 0 ? 0 : b;
+    }
+  }
+  terrainCtx.putImageData(terrainImage, 0, 0);
+  needsDraw = true;
+}
+
+/* ============================== 水流模擬 ============================== */
+function computeFlux() {
+  const H = hmap, W = water;
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+
+      if (x < N - 1) {
+        const j = i + 1;
+        const dh = (H[i] + W[i]) - (H[j] + W[j]);
+        let f = flowK * dh;
+        if (f > 0) {
+          const cap = W[i] * 0.25;
+          if (f > cap) f = cap;
+        } else if (f < 0) {
+          const cap = W[j] * 0.25;
+          if (f < -cap) f = -cap;
+        }
+        fluxH[i] = f;
+      }
+
+      if (y < N - 1) {
+        const j = i + N;
+        const dh = (H[i] + W[i]) - (H[j] + W[j]);
+        let f = flowK * dh;
+        if (f > 0) {
+          const cap = W[i] * 0.25;
+          if (f > cap) f = cap;
+        } else if (f < 0) {
+          const cap = W[j] * 0.25;
+          if (f < -cap) f = -cap;
+        }
+        fluxV[i] = f;
+      }
+    }
+  }
+}
+
+function applyFlux(dt) {
+  dW.fill(0);
+  dS.fill(0);
+  const W = water, S = sed;
+
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N - 1; x++) {
+      const i = row + x;
+      const f = fluxH[i];
+      if (f === 0) continue;
+      const j = i + 1;
+      const vol = f * dt;
+      dW[i] -= vol;
+      dW[j] += vol;
+
+      if (vol > 0) {
+        const conc = S[i] / (W[i] + 0.0001);
+        let sMove = vol * conc;
+        if (sMove > S[i]) sMove = S[i];
+        dS[i] -= sMove;
+        dS[j] += sMove;
+      } else {
+        const conc = S[j] / (W[j] + 0.0001);
+        let sMove = -vol * conc;
+        if (sMove > S[j]) sMove = S[j];
+        dS[j] -= sMove;
+        dS[i] += sMove;
+      }
+    }
+  }
+
+  for (let y = 0; y < N - 1; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+      const f = fluxV[i];
+      if (f === 0) continue;
+      const j = i + N;
+      const vol = f * dt;
+      dW[i] -= vol;
+      dW[j] += vol;
+
+      if (vol > 0) {
+        const conc = S[i] / (W[i] + 0.0001);
+        let sMove = vol * conc;
+        if (sMove > S[i]) sMove = S[i];
+        dS[i] -= sMove;
+        dS[j] += sMove;
+      } else {
+        const conc = S[j] / (W[j] + 0.0001);
+        let sMove = -vol * conc;
+        if (sMove > S[j]) sMove = S[j];
+        dS[j] -= sMove;
+        dS[i] += sMove;
+      }
+    }
+  }
+
+  for (let i = 0; i < N * N; i++) {
+    let w = W[i] + dW[i];
+    if (w < 0) w = 0;
+    W[i] = w;
+    let s = S[i] + dS[i];
+    if (s < 0) s = 0;
+    S[i] = s;
+  }
+}
+
+function simulateErosion(dt) {
+  const H = hmap, W = water, S = sed;
+  const eroRate = baseErosion * erosionMultiplier;
+  const Kc = baseCapacity;
+
+  for (let y = 0; y < N; y++) {
+    const row = y * N;
+    for (let x = 0; x < N; x++) {
+      const i = row + x;
+      const w = W[i];
+      if (w < 0.001) continue;
+
+      const xl = x > 0     ? H[i - 1] : H[i];
+      const xr = x < N - 1 ? H[i + 1] : H[i];
+      const yt = y > 0     ? H[i - N] : H[i];
+      const yb = y < N - 1 ? H[i + N] : H[i];
+      const gx = (xr - xl) * 0.5 * GRID;
+      const gy = (yb - yt) * 0.5 * GRID;
+      const slope = Math.sqrt(gx * gx + gy * gy);
+      if (slope < 0.0001) continue;
+
+      let totalFlux = 0;
+      if (x > 0)     totalFlux += Math.abs(fluxH[i - 1]);
+      if (x < N - 1) totalFlux += Math.abs(fluxH[i]);
+      if (y > 0)     totalFlux += Math.abs(fluxV[i - N]);
+      if (y < N - 1) totalFlux += Math.abs(fluxV[i]);
+      if (totalFlux < 0.0001) continue;
+
+      let capacity = Kc * totalFlux * slope;
+      if (capacity > 0.30) capacity = 0.30;
+
+      if (S[i] < capacity) {
+        let amount = (capacity - S[i]) * eroRate * dt;
+        const maxErode = H[i] * 0.02;
+        if (amount > maxErode) amount = maxErode;
+        if (amount > 0) { H[i] -= amount; S[i] += amount; }
+      } else {
+        let amount = (S[i] - capacity) * 0.5 * dt;
+        if (amount > 0.01) amount = 0.01;
+        if (amount > 0) { H[i] += amount; S[i] -= amount; }
+      }
+
+      if (H[i] < 0) H[i] = 0;
+      if (H[i] > 1) H[i] = 1;
+      if (S[i] < 0) S[i] = 0;
+    }
+  }
+}
+
+function simulate(dt) {
+  if (dt <= 0) return;
+
+  const rain = baseRain * rainMultiplier * dt;
+  if (rain > 0) {
+    for (let i = 0; i < water.length; i++) water[i] += rain;
+  }
+
+  computeFlux();
+  applyFlux(dt);
+  simulateErosion(dt);
+
+  const evapF = 1 - baseEvap * dt;
+  for (let i = 0; i < water.length; i++) {
+    const w = water[i] * evapF;
+    water[i] = w < 0.0001 ? 0 : w;
+  }
+}
+
+/* ============================== 等高線 (Marching Squares) ============================== */
+function edgePoint(e, x, y, v0, v1, v2, v3, level, out) {
+  let ax, ay, av, bx, by, bv;
+  switch (e) {
+    case 0: ax = x;     ay = y;     av = v0; bx = x + 1; by = y;     bv = v1; break;
+    case 1: ax = x + 1; ay = y;     av = v1; bx = x + 1; by = y + 1; bv = v2; break;
+    case 2: ax = x;     ay = y + 1; av = v3; bx = x + 1; by = y + 1; bv = v2; break;
+    default:ax = x;     ay = y;     av = v0; bx = x;     by = y + 1; bv = v3; break;
+  }
+  const dv = bv - av;
+  const t = dv !== 0 ? (level - av) / dv : 0.5;
+  out[0] = ax + (bx - ax) * t;
+  out[1] = ay + (by - ay) * t;
+}
+
+function buildContours() {
+  const step = contourStep;
+  let mn = 1, mx = 0;
+  for (let i = 0; i < hmap.length; i++) {
+    const v = hmap[i];
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+
+  const kMin = Math.ceil(mn / step);
+  const kMax = Math.floor((mx - 1e-9) / step);
+  if (kMax < kMin) { contours = []; return; }
+
+  const levels = [];
+  for (let k = kMin; k <= kMax; k++) levels.push({ k, v: k * step, segs: [] });
+
+  const S = scale;
+  const out = [0, 0];
+  const h = hmap;
+
+  for (let y = 0; y < GRID; y++) {
+    const row = y * N;
+    for (let x = 0; x < GRID; x++) {
+      const i = row + x;
+      const v0 = h[i], v1 = h[i + 1], v3 = h[i + N], v2 = h[i + N + 1];
+      const cmn = Math.min(v0, v1, v2, v3);
+      const cmx = Math.max(v0, v1, v2, v3);
+
+      let ka = Math.ceil(cmn / step);
+      let kb = Math.ceil(cmx / step) - 1;
+      if (ka < kMin) ka = kMin;
+      if (kb > kMax) kb = kMax;
+      if (ka > kb) continue;
+
+      for (let k = ka; k <= kb; k++) {
+        const level = k * step;
+        let idx = 0;
+        if (v0 > level) idx |= 1;
+        if (v1 > level) idx |= 2;
+        if (v2 > level) idx |= 4;
+        if (v3 > level) idx |= 8;
+        if (idx === 0 || idx === 15) continue;
+
+        const segs = levels[k - kMin].segs;
+        let ax, ay, bx, by;
+
+        switch (idx) {
+          case 1: case 14:
+            edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 2: case 13:
+            edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 3: case 12:
+            edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 4: case 11:
+            edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 6: case 9:
+            edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 7: case 8:
+            edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+            edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
+          case 5: {
+            const center = (v0 + v1 + v2 + v3) * 0.25;
+            if (center > level) {
+              edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+              edgePoint(2, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(3, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+            } else {
+              edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+              edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+            }
+            break;
+          }
+          case 10: {
+            const center = (v0 + v1 + v2 + v3) * 0.25;
+            if (center > level) {
+              edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+              edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+            } else {
+              edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+              edgePoint(2, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
+              edgePoint(3, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
+              segs.push(ax * S, ay * S, bx * S, by * S);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  for (let i = 0; i < levels.length; i++) {
+    levels[i].segs = new Float32Array(levels[i].segs);
+  }
+  contours = levels;
+}
+
+/* ============================== 視圖變換 ============================== */
+function viewScale() {
+  if (viewRotation === 0) return 1;
+  return Math.abs(Math.cos(viewRotation)) + Math.abs(Math.sin(viewRotation));
+}
+
+/* 螢幕座標 → 未旋轉的地圖座標 */
+function screenToCanvas(x, y) {
+  const vs = viewScale();
+  const cx = cw / 2, cy = ch / 2;
+  const dx = (x - cx) / vs;
+  const dy = (y - cy) / vs;
+  const c = Math.cos(viewRotation), s = Math.sin(viewRotation);
+  const rx =  dx * c + dy * s;
+  const ry = -dx * s + dy * c;
+  return { x: cx + rx, y: cy + ry };
+}
+
+/* ============================== 繪製 ============================== */
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  const vs = viewScale();
+  ctx.save();
+  if (viewRotation !== 0) {
+    const cx = cw / 2, cy = ch / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(vs, vs);
+    ctx.rotate(viewRotation);
+    ctx.translate(-cx, -cy);
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, cw, ch);
+
+  if (ui.contour.checked) {
+    drawContours();
+    if (ui.label.checked) drawLabels();
+  }
+
+  drawCursor();
+  ctx.restore();
+
+  drawCompass();
+}
+
+function drawContours() {
+  const lw = Math.max(1, cw / 760);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  for (let li = 0; li < contours.length; li++) {
+    const lv = contours[li];
+    if (ui.index.checked && lv.k % 5 === 0) continue;
+    const s = lv.segs;
+    for (let i = 0; i < s.length; i += 4) {
+      ctx.moveTo(s[i], s[i + 1]);
+      ctx.lineTo(s[i + 2], s[i + 3]);
+    }
+  }
+  ctx.strokeStyle = 'rgba(32,25,18,0.38)';
+  ctx.lineWidth = lw;
+  ctx.stroke();
+
+  if (ui.index.checked) {
+    ctx.beginPath();
+    for (let li = 0; li < contours.length; li++) {
+      const lv = contours[li];
+      if (lv.k % 5 !== 0) continue;
+      const s = lv.segs;
+      for (let i = 0; i < s.length; i += 4) {
+        ctx.moveTo(s[i], s[i + 1]);
+        ctx.lineTo(s[i + 2], s[i + 3]);
+      }
+    }
+    ctx.strokeStyle = 'rgba(18,13,8,0.78)';
+    ctx.lineWidth = lw * 1.9;
+    ctx.stroke();
+  }
+}
+
+function drawLabels() {
+  const fs = Math.max(9, Math.round(cw / 72));
+  ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const padX = fs * 0.35;
+  const boxH = fs + 4;
+
+  for (let li = 0; li < contours.length; li++) {
+    const lv = contours[li];
+    const s = lv.segs;
+    const nSeg = s.length / 4;
+    if (nSeg < 6) continue;
+
+    const want = Math.min(4, Math.max(1, Math.round(nSeg / 70)));
+    const stride = Math.max(1, Math.floor(nSeg / want));
+    const txt = String(Math.round(lv.v * 1000));
+    const tw = ctx.measureText(txt).width;
+
+    for (let i = 0; i < nSeg; i += stride) {
+      const o = i * 4;
+      const x1 = s[o], y1 = s[o + 1], x2 = s[o + 2], y2 = s[o + 3];
+      const dx = x2 - x1, dy = y2 - y1;
+      if (dx * dx + dy * dy < 100) continue;
+
+      let ang = Math.atan2(dy, dx);
+      if (ang > Math.PI / 2)  ang -= Math.PI;
+      if (ang < -Math.PI / 2) ang += Math.PI;
+
+      ctx.save();
+      ctx.translate((x1 + x2) * 0.5, (y1 + y2) * 0.5);
+      ctx.rotate(ang);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.beginPath();
+      ctx.roundRect(-tw / 2 - padX, -boxH / 2, tw + padX * 2, boxH, 2.5);
+      ctx.fill();
+
+      ctx.fillStyle = '#241a10';
+      ctx.fillText(txt, 0, 0.5);
+      ctx.restore();
+    }
+  }
+}
+
+function drawCursor() {
+  if (!pointerInside) return;
+  const r = brushRadius * scale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(pointerPos.x, pointerPos.y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = tool === 'raise' ? 'rgba(120,235,170,0.9)' : 'rgba(255,150,120,0.9)';
+  ctx.lineWidth = 1.5 / viewScale();
+  ctx.setLineDash([5 / viewScale(), 4 / viewScale()]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = tool === 'raise' ? 'rgba(120,235,170,0.09)' : 'rgba(255,150,120,0.09)';
+  ctx.fill();
+  ctx.restore();
+}
+
+/* 羅盤：固定在螢幕右上角，顯示螢幕上的光源方向 */
+function drawCompass() {
+  const R = 28;
+  const px = cw - R - 16;
+  const py = R + 16;
+
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.arc(px, py, R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(13,19,27,0.78)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,110,135,0.45)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(px - R + 5, py); ctx.lineTo(px + R - 5, py);
+  ctx.moveTo(px, py - R + 5); ctx.lineTo(px, py + R - 5);
+  ctx.strokeStyle = 'rgba(90,110,135,0.28)';
+  ctx.stroke();
+
+  /* 方位角 + 視圖旋轉 → 螢幕方向 */
+  const az = lightAzimuth * Math.PI / 180 + viewRotation;
+  const len = R - 9;
+  const ex = px + Math.sin(az) * len;
+  const ey = py - Math.cos(az) * len;
+
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(ex, ey);
+  ctx.strokeStyle = '#ffd76a';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  const aAng = Math.atan2(ey - py, ex - px);
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - 7 * Math.cos(aAng - 0.42), ey - 7 * Math.sin(aAng - 0.42));
+  ctx.lineTo(ex - 7 * Math.cos(aAng + 0.42), ey - 7 * Math.sin(aAng + 0.42));
+  ctx.closePath();
+  ctx.fillStyle = '#ffd76a';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#e8f0fa';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ============================== 地形編輯 ============================== */
+function stampAt(gx, gy, dir) {
+  const R = brushRadius;
+  const R2 = R * R;
+  const amount = 0.055 / R * dir;
+
+  const x0 = Math.max(0, Math.floor(gx - R));
+  const x1 = Math.min(N - 1, Math.ceil(gx + R));
+  const y0 = Math.max(0, Math.floor(gy - R));
+  const y1 = Math.min(N - 1, Math.ceil(gy + R));
+
+  for (let y = y0; y <= y1; y++) {
+    const row = y * N;
+    const dy = y - gy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - gx;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > R2) continue;
+      const f = 1 - d2 / R2;
+      const w = f * f;
+      const i = row + x;
+      const nv = hmap[i] + amount * w;
+      hmap[i] = nv < 0 ? 0 : nv > 1 ? 1 : nv;
+    }
+  }
+}
+
+function applyBrush(gx, gy, dir) {
+  if (!lastGrid) {
+    stampAt(gx, gy, dir);
+  } else {
+    const dx = gx - lastGrid.x;
+    const dy = gy - lastGrid.y;
+    const dist = Math.hypot(dx, dy);
+    const steps = Math.max(1, Math.ceil(dist / 0.9));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      stampAt(lastGrid.x + dx * t, lastGrid.y + dy * t, dir);
+    }
+  }
+  lastGrid = { x: gx, y: gy };
+  terrainDirty = true;
+  needsContour = true;
+}
+
+/* ============================== 事件 ============================== */
+function canvasPos(e) {
+  const rect = cv.getBoundingClientRect();
+  const sx = (e.clientX - rect.left) * (cw / rect.width);
+  const sy = (e.clientY - rect.top)  * (ch / rect.height);
+  return screenToCanvas(sx, sy);
+}
+function gridPos(p) {
+  return { x: p.x / scale, y: p.y / scale };
+}
+
+cv.addEventListener('pointerdown', (e) => {
+  const p = canvasPos(e);
+  pointerPos = p;
+  pointerInside = true;
+  const g = gridPos(p);
+  const dir = (e.shiftKey || e.button === 2 || tool === 'lower') ? -1 : 1;
+  dragging = true;
+  lastGrid = null;
+  cv.setPointerCapture(e.pointerId);
+  applyBrush(g.x, g.y, dir);
+  needsDraw = true;
+});
+
+cv.addEventListener('pointermove', (e) => {
+  const p = canvasPos(e);
+  pointerPos = p;
+  pointerInside = true;
+  needsDraw = true;
+
+  const g = gridPos(p);
+  const ix = clamp(Math.round(g.x), 0, N - 1);
+  const iy = clamp(Math.round(g.y), 0, N - 1);
+  const idx = iy * N + ix;
+  const alt = Math.round(hmap[idx] * 1000);
+  const dep = water[idx];
+  const depTxt = dep > 0.0005 ? ` · 水深 ${Math.round(dep * 1000)}` : '';
+  readout.textContent = `海拔 ${alt} m${depTxt}`;
+
+  if (dragging) {
+    const dir = (e.shiftKey || (e.buttons & 2) || tool === 'lower') ? -1 : 1;
+    applyBrush(g.x, g.y, dir);
+  }
+});
+
+function endDrag() { dragging = false; lastGrid = null; }
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('pointerleave', () => { pointerInside = false; needsDraw = true; });
+cv.addEventListener('pointerenter', () => { pointerInside = true; });
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+/* ============================== UI 綁定 ============================== */
+const btnRaise = document.getElementById('btnRaise');
+const btnLower = document.getElementById('btnLower');
+
+btnRaise.onclick = () => {
+  tool = 'raise';
+  btnRaise.classList.add('on');
+  btnLower.classList.remove('on');
+  needsDraw = true;
+};
+btnLower.onclick = () => {
+  tool = 'lower';
+  btnLower.classList.add('on');
+  btnRaise.classList.remove('on');
+  needsDraw = true;
+};
+
+/* 視覺方向 */
+const rAz  = document.getElementById('rAz');
+const vAz  = document.getElementById('vAz');
+const rEl  = document.getElementById('rEl');
+const vEl  = document.getElementById('vEl');
+const rCon = document.getElementById('rCon');
+const vCon = document.getElementById('vCon');
+const rRot = document.getElementById('rRot');
+const vRot = document.getElementById('vRot');
+
+rAz.oninput = () => {
+  lightAzimuth = +rAz.value;
+  vAz.textContent = lightAzimuth + '°';
+  terrainDirty = true;
+};
+rEl.oninput = () => {
+  lightElevation = +rEl.value;
+  vEl.textContent = lightElevation + '°';
+  terrainDirty = true;
+};
+rCon.oninput = () => {
+  shadowContrast = +rCon.value;
+  vCon.textContent = shadowContrast.toFixed(2);
+  terrainDirty = true;
+};
+rRot.oninput = () => {
+  viewRotation = (+rRot.value) * Math.PI / 180;
+  vRot.textContent = rRot.value + '°';
+  needsDraw = true;
+};
+
+/* 時間控制 */
+const btnPlay = document.getElementById('btnPlay');
+btnPlay.onclick = () => {
+  timeRunning = !timeRunning;
+  btnPlay.classList.toggle('on', timeRunning);
+  btnPlay.textContent = timeRunning ? '⏸ 暫停' : '▶ 開始';
+};
+
+document.getElementById('btnClearWater').onclick = () => {
+  clearWater();
+  terrainDirty = true;
+};
+
+document.getElementById('btnRand').onclick = () => {
+  generateTerrain((Math.random() * 1e6) | 0);
+};
+document.getElementById('btnFlat').onclick = () => {
+  flattenTerrain();
+};
+
+const rSpeed = document.getElementById('rSpeed');
+const vSpeed = document.getElementById('vSpeed');
+rSpeed.oninput = () => {
+  timeSpeed = +rSpeed.value;
+  vSpeed.textContent = timeSpeed.toFixed(2) + '×';
+};
+
+const rRain = document.getElementById('rRain');
+const vRain = document.getElementById('vRain');
+rRain.oninput = () => {
+  rainMultiplier = +rRain.value;
+  vRain.textContent = rainMultiplier.toFixed(1);
+};
+
+const rErosion = document.getElementById('rErosion');
+const vErosion = document.getElementById('vErosion');
+rErosion.oninput = () => {
+  erosionMultiplier = +rErosion.value;
+  vErosion.textContent = erosionMultiplier.toFixed(1);
+};
+
+const rRadius = document.getElementById('rRadius');
+const vRadius = document.getElementById('vRadius');
+rRadius.oninput = () => {
+  brushRadius = +rRadius.value;
+  vRadius.textContent = brushRadius;
+  needsDraw = true;
+};
+
+const STEP_VALUES = [0.01, 0.02, 0.025, 0.05, 0.1];
+const rStep = document.getElementById('rStep');
+const vStep = document.getElementById('vStep');
+rStep.oninput = () => {
+  contourStep = STEP_VALUES[+rStep.value];
+  vStep.textContent = Math.round(contourStep * 1000);
+  needsContour = true;
+};
+
+ui.shade.onchange   = () => { terrainDirty = true; };
+ui.contour.onchange = () => { needsDraw = true; };
+ui.label.onchange   = () => { needsDraw = true; };
+ui.index.onchange   = () => { needsDraw = true; };
+
+/* ============================== 尺寸 ============================== */
+function resizeCanvas() {
+  const rect = stage.getBoundingClientRect();
+  const size = Math.max(220, Math.floor(Math.min(rect.width, rect.height) - 40));
+  cw = ch = size;
+
+  cv.style.width  = size + 'px';
+  cv.style.height = size + 'px';
+  cv.width  = Math.round(size * dpr);
+  cv.height = Math.round(size * dpr);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  scale = cw / GRID;
+
+  needsContour = true;
+  needsDraw = true;
+}
+window.addEventListener('resize', resizeCanvas);
+
+/* ============================== 主迴圈 ============================== */
+let lastTime = performance.now();
+let simTimeAccum = 0;
+
+function loop(now) {
+  const realDt = Math.min(0.1, (now - lastTime) / 1000);
+  lastTime = now;
+
+  if (timeRunning) {
+    const totalDt = Math.min(0.1, realDt * timeSpeed);
+    const steps = Math.max(1, Math.min(3, Math.ceil(totalDt / 0.03)));
+    const simDt = totalDt / steps;
+    for (let s = 0; s < steps; s++) simulate(simDt);
+
+    simTimeAccum += totalDt;
+    terrainDirty = true;
+    needsContour = true;
+    needsDraw = true;
+    statusEl.textContent = `時間 ${simTimeAccum.toFixed(1)}s · 流速 ${timeSpeed.toFixed(2)}×`;
+  } else {
+    statusEl.textContent = '時間 —';
+  }
+
+  if (terrainDirty) {
+    renderTerrain();
+    terrainDirty = false;
+  }
+
+  if (needsContour) {
+    contourSkip++;
+    const interval = timeRunning ? 4 : 1;
+    if (contourSkip >= interval) {
+      buildContours();
+      needsContour = false;
+      contourSkip = 0;
+      needsDraw = true;
+    }
+  }
+
+  if (needsDraw) {
+    draw();
+    needsDraw = false;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+/* ============================== 啟動 ============================== */
+(function init() {
+  initTerrainImage();
+  generateTerrain((Math.random() * 1e6) | 0);
+  resizeCanvas();
+
+  vAz.textContent  = lightAzimuth + '°';
+  vEl.textContent  = lightElevation + '°';
+  vCon.textContent = shadowContrast.toFixed(2);
+  vRot.textContent = '0°';
+  vSpeed.textContent = timeSpeed.toFixed(2) + '×';
+  vRain.textContent  = rainMultiplier.toFixed(1);
+  vErosion.textContent = erosionMultiplier.toFixed(1);
+  vStep.textContent  = Math.round(contourStep * 1000);
+
+  timeRunning = false;
+  btnPlay.classList.remove('on');
+  btnPlay.textContent = '▶ 開始';
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
