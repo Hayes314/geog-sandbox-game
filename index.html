@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>地理沙盆 · 2.5D 視角</title>
+<title>地理沙盆 · 水流、時間與視覺方向</title>
 <style>
   html, body, *, *::before, *::after {
     user-select: none !important;
@@ -77,21 +77,19 @@
 <div id="app">
   <aside id="panel">
     <h1>地理沙盆</h1>
-    <div class="sub">TOPOGRAPHIC SANDBOX · 2.5D 視角</div>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 視覺方向</div>
 
     <!-- 視覺方向 -->
     <div class="group">
       <label class="t">視覺方向</label>
-      <div class="lbl"><span>視角傾斜</span><span class="val" id="vTilt">0.30</span></div>
-      <input type="range" id="rTilt" min="0" max="1" value="0.30" step="0.02">
-      <div class="lbl"><span>視圖旋轉</span><span class="val" id="vRot">0°</span></div>
-      <input type="range" id="rRot" min="0" max="360" value="0" step="1">
       <div class="lbl"><span>光照方位</span><span class="val" id="vAz">315°</span></div>
       <input type="range" id="rAz" min="0" max="360" value="315" step="1">
       <div class="lbl"><span>光照仰角</span><span class="val" id="vEl">45°</span></div>
       <input type="range" id="rEl" min="5" max="85" value="45" step="1">
       <div class="lbl"><span>陰影對比</span><span class="val" id="vCon">0.70</span></div>
       <input type="range" id="rCon" min="0" max="1.2" value="0.7" step="0.02">
+      <div class="lbl"><span>視圖旋轉</span><span class="val" id="vRot">0°</span></div>
+      <input type="range" id="rRot" min="0" max="360" value="0" step="1">
     </div>
 
     <!-- 時間控制 -->
@@ -148,9 +146,8 @@
     <div class="hint">
       <b>左鍵拖曳</b>抬升地形<br>
       <b>Shift + 拖曳</b>或<b>右鍵拖曳</b>下陷地形<br>
-      調整<b>視角傾斜</b>可獲得 2.5D 斜視效果，<br>
-      <b>視圖旋轉</b>讓地圖繞中心轉動。<br>
-      右上角羅盤顯示光源在螢幕上的方向。
+      右上角羅盤顯示目前光源方向。<br>
+      <b>視圖旋轉</b>會旋轉整張地圖，方便從不同方位觀察。
     </div>
   </aside>
 
@@ -167,7 +164,7 @@
 /* ============================== 基本設定 ============================== */
 const N = 160;
 const GRID = N - 1;
-const RS = N * 4;                 // 場景烘焙解析度
+const SEA = 0.43;
 
 const cv      = document.getElementById('cv');
 const ctx     = cv.getContext('2d');
@@ -177,8 +174,9 @@ const statusEl= document.getElementById('status');
 
 const dpr = Math.min(window.devicePixelRatio || 1, 2);
 let cw = 640, ch = 640;
+let scale = 1;
 
-/* 地形與流體 */
+/* 地形與流體狀態 */
 let hmap    = new Float32Array(N * N);
 let water   = new Float32Array(N * N);
 let sed     = new Float32Array(N * N);
@@ -188,52 +186,38 @@ const dW    = new Float32Array(N * N);
 const dS    = new Float32Array(N * N);
 
 /* 地形貼圖 */
-const terrainCanvas = document.createElement('canvas');
-terrainCanvas.width  = N;
-terrainCanvas.height = N;
-const terrainCtx = terrainCanvas.getContext('2d');
-let terrainImage = null;
+let terrainCanvas = document.createElement('canvas');
+let terrainCtx    = terrainCanvas.getContext('2d');
+let terrainImage  = null;
 let terrainPixels = null;
 
-/* 場景烘焙（地形 + 等高線） */
-const sceneCanvas = document.createElement('canvas');
-sceneCanvas.width  = RS;
-sceneCanvas.height = RS;
-const sceneCtx = sceneCanvas.getContext('2d');
-
-/* 等高線（存網格座標 0..GRID） */
+/* 等高線 */
 let contours = [];
 let contourStep = 0.025;
 let needsContour = true;
 let needsDraw    = true;
 let contourSkip  = 0;
 let terrainDirty = true;
-let sceneDirty   = true;
 
-/* 工具 */
+/* 工具狀態 */
 let tool = 'raise';
 let brushRadius = 14;
 let pointerInside = false;
-let pointerScreen = { x: 0, y: 0 };
-let pointerMap    = { x: 0, y: 0 };
+let pointerPos = { x: 0, y: 0 };
 let dragging = false;
 let lastGrid = null;
 
-/* 時間 */
+/* 時間推進 */
 let timeRunning = false;
 let timeSpeed   = 1.0;
 let rainMultiplier    = 1.0;
 let erosionMultiplier = 1.0;
 
-/* 視覺參數 */
-let lightAzimuth   = 315;
-let lightElevation = 45;
-let shadowContrast = 0.70;
-let viewRotation   = 0;    // 弧度
-let tilt           = 0.30; // 0..1
-
-/* 透視參數（每幀更新） */
-let _S = 600, _zf = 1.9, _invZf = 1 / 1.9;
+/* 視覺方向 */
+let lightAzimuth   = 315;      // 度，0 = 北（螢幕上方），順時針
+let lightElevation = 45;       // 度
+let shadowContrast = 0.70;     // 漫反射強度
+let viewRotation   = 0;        // 弧度
 
 /* 模擬常數 */
 const baseRain     = 0.0030;
@@ -282,25 +266,22 @@ function fbm(x, y, seed, oct) {
   return sum / norm;
 }
 
-/* ============================== 色階（去藍化的大地色系） ============================== */
+/* ============================== 色階 ============================== */
 const STOPS = [
-  [0.00, [ 34,  27,  22]],   // 最深海床
-  [0.15, [ 48,  38,  30]],
-  [0.28, [ 70,  55,  40]],
-  [0.36, [ 96,  76,  52]],
-  [0.40, [128, 104,  70]],
-  [0.43, [176, 152, 108]],   // 淺海沙底
-  [0.445,[206, 188, 140]],   // 沙灘
-  [0.47, [216, 204, 158]],
-  [0.50, [196, 196, 142]],   // 低地草原
-  [0.56, [156, 174, 102]],
-  [0.64, [112, 148,  84]],
-  [0.72, [ 84, 118,  70]],   // 森林
-  [0.80, [104, 104,  86]],
-  [0.87, [138, 128, 118]],   // 岩石
-  [0.93, [176, 172, 168]],
-  [0.97, [216, 218, 222]],
-  [1.00, [252, 253, 255]],
+  [0.00, [  8,  24,  48]],
+  [0.20, [ 16,  52,  96]],
+  [0.34, [ 30,  92, 140]],
+  [0.41, [ 62, 132, 176]],
+  [0.435,[ 96, 170, 192]],
+  [0.452,[222, 210, 160]],
+  [0.480,[198, 198, 138]],
+  [0.530,[124, 168,  92]],
+  [0.630,[ 74, 132,  66]],
+  [0.720,[108, 116,  76]],
+  [0.810,[140, 130, 110]],
+  [0.890,[178, 172, 164]],
+  [0.950,[236, 237, 242]],
+  [1.00, [255, 255, 255]],
 ];
 const LUT_N = 512;
 const lut = new Uint8Array(LUT_N * 3);
@@ -362,8 +343,10 @@ function clearWater() {
   needsDraw = true;
 }
 
-/* ============================== 地形貼圖 ============================== */
+/* ============================== 地形貼圖（動態光照） ============================== */
 function initTerrainImage() {
+  terrainCanvas.width  = N;
+  terrainCanvas.height = N;
   terrainImage  = terrainCtx.createImageData(N, N);
   terrainPixels = terrainImage.data;
   for (let i = 3; i < terrainPixels.length; i += 4) terrainPixels[i] = 255;
@@ -373,6 +356,7 @@ function renderTerrain() {
   const px = terrainPixels;
   const shading = ui.shade.checked;
 
+  /* 依方位角與仰角計算光源向量 */
   const azRad = lightAzimuth   * Math.PI / 180;
   const elRad = lightElevation * Math.PI / 180;
   const lx =  Math.sin(azRad) * Math.cos(elRad);
@@ -409,26 +393,29 @@ function renderTerrain() {
         r *= sh; g *= sh; b *= sh;
       }
 
-      /* ---- 水體（淺藍半透明，深淺影響顏色與透明度） ---- */
+      /* ---- 水體混色 ---- */
       const w = W[i];
       if (w > 0.0003) {
-        const deep = Math.min(1, w * 8);
-        let wr = 130 - 95 * deep;
-        let wg = 200 - 115 * deep;
-        let wb = 240 - 85 * deep;
+        let wf = Math.sqrt(w) * 2.5;
+        if (wf > 1) wf = 1;
+        const deep = w * 10 > 1 ? 1 : w * 10;
+        let wr = 90 - 60 * deep;
+        let wg = 150 - 80 * deep;
+        let wb = 210 - 10 * deep;
 
         const s = S[i];
         if (s > 0.0003) {
-          let cc = Math.min(1, s / (w + 0.001) * 5);
-          wr = wr * (1 - cc) + 165 * cc;
-          wg = wg * (1 - cc) + 135 * cc;
-          wb = wb * (1 - cc) +  95 * cc;
+          let cc = s / (w + 0.001) * 5;
+          if (cc > 1) cc = 1;
+          wr = wr * (1 - cc) + 160 * cc;
+          wg = wg * (1 - cc) + 130 * cc;
+          wb = wb * (1 - cc) +  90 * cc;
         }
 
-        const alpha = Math.min(0.88, w * 14);
-        r = r * (1 - alpha) + wr * alpha;
-        g = g * (1 - alpha) + wg * alpha;
-        b = b * (1 - alpha) + wb * alpha;
+        const blend = wf * 0.85;
+        r = r * (1 - blend) + wr * blend;
+        g = g * (1 - blend) + wg * blend;
+        b = b * (1 - blend) + wb * blend;
       }
 
       const o = i * 4;
@@ -438,8 +425,7 @@ function renderTerrain() {
     }
   }
   terrainCtx.putImageData(terrainImage, 0, 0);
-  sceneDirty = true;
-  needsDraw  = true;
+  needsDraw = true;
 }
 
 /* ============================== 水流模擬 ============================== */
@@ -454,8 +440,13 @@ function computeFlux() {
         const j = i + 1;
         const dh = (H[i] + W[i]) - (H[j] + W[j]);
         let f = flowK * dh;
-        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
-        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
+        if (f > 0) {
+          const cap = W[i] * 0.25;
+          if (f > cap) f = cap;
+        } else if (f < 0) {
+          const cap = W[j] * 0.25;
+          if (f < -cap) f = -cap;
+        }
         fluxH[i] = f;
       }
 
@@ -463,8 +454,13 @@ function computeFlux() {
         const j = i + N;
         const dh = (H[i] + W[i]) - (H[j] + W[j]);
         let f = flowK * dh;
-        if (f > 0) { const cap = W[i] * 0.25; if (f > cap) f = cap; }
-        else if (f < 0) { const cap = W[j] * 0.25; if (f < -cap) f = -cap; }
+        if (f > 0) {
+          const cap = W[i] * 0.25;
+          if (f > cap) f = cap;
+        } else if (f < 0) {
+          const cap = W[j] * 0.25;
+          if (f < -cap) f = -cap;
+        }
         fluxV[i] = f;
       }
     }
@@ -484,16 +480,21 @@ function applyFlux(dt) {
       if (f === 0) continue;
       const j = i + 1;
       const vol = f * dt;
-      dW[i] -= vol; dW[j] += vol;
+      dW[i] -= vol;
+      dW[j] += vol;
 
       if (vol > 0) {
         const conc = S[i] / (W[i] + 0.0001);
-        let m = vol * conc; if (m > S[i]) m = S[i];
-        dS[i] -= m; dS[j] += m;
+        let sMove = vol * conc;
+        if (sMove > S[i]) sMove = S[i];
+        dS[i] -= sMove;
+        dS[j] += sMove;
       } else {
         const conc = S[j] / (W[j] + 0.0001);
-        let m = -vol * conc; if (m > S[j]) m = S[j];
-        dS[j] -= m; dS[i] += m;
+        let sMove = -vol * conc;
+        if (sMove > S[j]) sMove = S[j];
+        dS[j] -= sMove;
+        dS[i] += sMove;
       }
     }
   }
@@ -506,23 +507,32 @@ function applyFlux(dt) {
       if (f === 0) continue;
       const j = i + N;
       const vol = f * dt;
-      dW[i] -= vol; dW[j] += vol;
+      dW[i] -= vol;
+      dW[j] += vol;
 
       if (vol > 0) {
         const conc = S[i] / (W[i] + 0.0001);
-        let m = vol * conc; if (m > S[i]) m = S[i];
-        dS[i] -= m; dS[j] += m;
+        let sMove = vol * conc;
+        if (sMove > S[i]) sMove = S[i];
+        dS[i] -= sMove;
+        dS[j] += sMove;
       } else {
         const conc = S[j] / (W[j] + 0.0001);
-        let m = -vol * conc; if (m > S[j]) m = S[j];
-        dS[j] -= m; dS[i] += m;
+        let sMove = -vol * conc;
+        if (sMove > S[j]) sMove = S[j];
+        dS[j] -= sMove;
+        dS[i] += sMove;
       }
     }
   }
 
   for (let i = 0; i < N * N; i++) {
-    let w = W[i] + dW[i]; if (w < 0) w = 0; W[i] = w;
-    let s = S[i] + dS[i]; if (s < 0) s = 0; S[i] = s;
+    let w = W[i] + dW[i];
+    if (w < 0) w = 0;
+    W[i] = w;
+    let s = S[i] + dS[i];
+    if (s < 0) s = 0;
+    S[i] = s;
   }
 }
 
@@ -535,7 +545,8 @@ function simulateErosion(dt) {
     const row = y * N;
     for (let x = 0; x < N; x++) {
       const i = row + x;
-      if (W[i] < 0.001) continue;
+      const w = W[i];
+      if (w < 0.001) continue;
 
       const xl = x > 0     ? H[i - 1] : H[i];
       const xr = x < N - 1 ? H[i + 1] : H[i];
@@ -578,7 +589,9 @@ function simulate(dt) {
   if (dt <= 0) return;
 
   const rain = baseRain * rainMultiplier * dt;
-  if (rain > 0) for (let i = 0; i < water.length; i++) water[i] += rain;
+  if (rain > 0) {
+    for (let i = 0; i < water.length; i++) water[i] += rain;
+  }
 
   computeFlux();
   applyFlux(dt);
@@ -591,7 +604,7 @@ function simulate(dt) {
   }
 }
 
-/* ============================== 等高線（網格座標） ============================== */
+/* ============================== 等高線 (Marching Squares) ============================== */
 function edgePoint(e, x, y, v0, v1, v2, v3, level, out) {
   let ax, ay, av, bx, by, bv;
   switch (e) {
@@ -622,6 +635,7 @@ function buildContours() {
   const levels = [];
   for (let k = kMin; k <= kMax; k++) levels.push({ k, v: k * step, segs: [] });
 
+  const S = scale;
   const out = [0, 0];
   const h = hmap;
 
@@ -655,43 +669,43 @@ function buildContours() {
           case 1: case 14:
             edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 2: case 13:
             edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 3: case 12:
             edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 4: case 11:
             edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 6: case 9:
             edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 7: case 8:
             edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
             edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-            segs.push(ax, ay, bx, by); break;
+            segs.push(ax * S, ay * S, bx * S, by * S); break;
           case 5: {
             const center = (v0 + v1 + v2 + v3) * 0.25;
             if (center > level) {
               edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
               edgePoint(2, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(3, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
             } else {
               edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
               edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
             }
             break;
           }
@@ -700,17 +714,17 @@ function buildContours() {
             if (center > level) {
               edgePoint(3, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(0, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
               edgePoint(1, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(2, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
             } else {
               edgePoint(0, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(1, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
               edgePoint(2, x, y, v0, v1, v2, v3, level, out); ax = out[0]; ay = out[1];
               edgePoint(3, x, y, v0, v1, v2, v3, level, out); bx = out[0]; by = out[1];
-              segs.push(ax, ay, bx, by);
+              segs.push(ax * S, ay * S, bx * S, by * S);
             }
             break;
           }
@@ -719,161 +733,98 @@ function buildContours() {
     }
   }
 
-  for (let i = 0; i < levels.length; i++) levels[i].segs = new Float32Array(levels[i].segs);
+  for (let i = 0; i < levels.length; i++) {
+    levels[i].segs = new Float32Array(levels[i].segs);
+  }
   contours = levels;
 }
 
-/* ============================== 透視映射 ============================== */
-function updateViewParams() {
-  _S = cw;
-  _zf = 1.001 + 3.0 * tilt;
-  _invZf = 1 / _zf;
+/* ============================== 視圖變換 ============================== */
+function viewScale() {
+  if (viewRotation === 0) return 1;
+  return Math.abs(Math.cos(viewRotation)) + Math.abs(Math.sin(viewRotation));
 }
 
-function screenYToMapT(sy) {
-  const u = clamp(sy / _S, 0, 1);
-  const f = 1 - _invZf;
-  const invZ = u * f + _invZf;
-  const z = 1 / invZ;
-  return (_zf - z) / (_zf - 1);
+/* 螢幕座標 → 未旋轉的地圖座標 */
+function screenToCanvas(x, y) {
+  const vs = viewScale();
+  const cx = cw / 2, cy = ch / 2;
+  const dx = (x - cx) / vs;
+  const dy = (y - cy) / vs;
+  const c = Math.cos(viewRotation), s = Math.sin(viewRotation);
+  const rx =  dx * c + dy * s;
+  const ry = -dx * s + dy * c;
+  return { x: cx + rx, y: cy + ry };
 }
 
-function mapTToScreenY(t) {
-  const z = _zf - t * (_zf - 1);
-  const invZ = 1 / z;
-  return (invZ - _invZf) / (1 - _invZf) * _S;
-}
-
-function mapWidthAt(t) {
-  const z = _zf - t * (_zf - 1);
-  return 1 / z;
-}
-
-/* 網格座標 → 未旋轉的螢幕座標 */
-function mapToScreen(gx, gy) {
-  const t = clamp(gy / GRID, 0, 1);
-  const w = _S * mapWidthAt(t);
-  const sy = mapTToScreenY(t);
-  const sx = (_S - w) / 2 + (gx / GRID) * w;
-  return { x: sx, y: sy };
-}
-
-/* 螢幕座標 → 網格座標 */
-function screenToMap(sx, sy) {
-  let dx = sx - _S / 2;
-  let dy = sy - _S / 2;
-  if (viewRotation !== 0) {
-    const c = Math.cos(-viewRotation), s = Math.sin(-viewRotation);
-    const rx = dx * c - dy * s;
-    const ry = dx * s + dy * c;
-    dx = rx; dy = ry;
-  }
-  const bx = dx + _S / 2;
-  const by = dy + _S / 2;
-  const t = screenYToMapT(by);
-  const w = _S * mapWidthAt(t);
-  const gx = ((bx - (_S - w) / 2) / w) * GRID;
-  const gy = t * GRID;
-  return { x: gx, y: gy };
-}
-
-/* ============================== 場景烘焙 ============================== */
-function renderScene() {
-  const s = RS / GRID;
-
-  sceneCtx.clearRect(0, 0, RS, RS);
-  sceneCtx.imageSmoothingEnabled = true;
-  sceneCtx.imageSmoothingQuality = 'high';
-  sceneCtx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, RS, RS);
-
-  if (!ui.contour.checked) return;
-
-  const lw = RS / 640;
-  sceneCtx.lineCap = 'round';
-  sceneCtx.lineJoin = 'round';
-
-  sceneCtx.beginPath();
-  for (let li = 0; li < contours.length; li++) {
-    const lv = contours[li];
-    if (ui.index.checked && lv.k % 5 === 0) continue;
-    const segs = lv.segs;
-    for (let i = 0; i < segs.length; i += 4) {
-      sceneCtx.moveTo(segs[i] * s, segs[i + 1] * s);
-      sceneCtx.lineTo(segs[i + 2] * s, segs[i + 3] * s);
-    }
-  }
-  sceneCtx.strokeStyle = 'rgba(32,25,18,0.42)';
-  sceneCtx.lineWidth = lw;
-  sceneCtx.stroke();
-
-  if (ui.index.checked) {
-    sceneCtx.beginPath();
-    for (let li = 0; li < contours.length; li++) {
-      const lv = contours[li];
-      if (lv.k % 5 !== 0) continue;
-      const segs = lv.segs;
-      for (let i = 0; i < segs.length; i += 4) {
-        sceneCtx.moveTo(segs[i] * s, segs[i + 1] * s);
-        sceneCtx.lineTo(segs[i + 2] * s, segs[i + 3] * s);
-      }
-    }
-    sceneCtx.strokeStyle = 'rgba(18,13,8,0.80)';
-    sceneCtx.lineWidth = lw * 1.9;
-    sceneCtx.stroke();
-  }
-}
-
-/* ============================== 主繪製 ============================== */
+/* ============================== 繪製 ============================== */
 function draw() {
-  updateViewParams();
-
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
 
+  const vs = viewScale();
   ctx.save();
   if (viewRotation !== 0) {
     const cx = cw / 2, cy = ch / 2;
     ctx.translate(cx, cy);
+    ctx.scale(vs, vs);
     ctx.rotate(viewRotation);
     ctx.translate(-cx, -cy);
   }
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, cw, ch);
 
-  const S = _S;
-
-  /* 逐行透視繪製，遠端合併多行以提升效能 */
-  let sy = 0;
-  while (sy < S) {
-    const t0 = screenYToMapT(sy);
-    const t1 = screenYToMapT(sy + 1);
-    let dy = 1;
-    const srcH1 = (t1 - t0) * RS;
-    if (srcH1 < 1) {
-      dy = Math.min(S - sy, Math.max(1, Math.ceil(1 / Math.max(0.0001, srcH1))));
-    }
-
-    const tNext = screenYToMapT(sy + dy);
-    const tm = (t0 + tNext) / 2;
-    const w = S * mapWidthAt(tm);
-    const srcY = t0 * RS;
-    const srcH = Math.max(0.5, (tNext - t0) * RS);
-    const dstX = (S - w) / 2;
-
-    ctx.drawImage(sceneCanvas, 0, srcY, RS, srcH, dstX, sy, w, dy);
-    sy += dy;
+  if (ui.contour.checked) {
+    drawContours();
+    if (ui.label.checked) drawLabels();
   }
 
-  if (ui.contour.checked && ui.label.checked) drawLabels();
   drawCursor();
-
   ctx.restore();
+
   drawCompass();
 }
 
+function drawContours() {
+  const lw = Math.max(1, cw / 760);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  for (let li = 0; li < contours.length; li++) {
+    const lv = contours[li];
+    if (ui.index.checked && lv.k % 5 === 0) continue;
+    const s = lv.segs;
+    for (let i = 0; i < s.length; i += 4) {
+      ctx.moveTo(s[i], s[i + 1]);
+      ctx.lineTo(s[i + 2], s[i + 3]);
+    }
+  }
+  ctx.strokeStyle = 'rgba(32,25,18,0.38)';
+  ctx.lineWidth = lw;
+  ctx.stroke();
+
+  if (ui.index.checked) {
+    ctx.beginPath();
+    for (let li = 0; li < contours.length; li++) {
+      const lv = contours[li];
+      if (lv.k % 5 !== 0) continue;
+      const s = lv.segs;
+      for (let i = 0; i < s.length; i += 4) {
+        ctx.moveTo(s[i], s[i + 1]);
+        ctx.lineTo(s[i + 2], s[i + 3]);
+      }
+    }
+    ctx.strokeStyle = 'rgba(18,13,8,0.78)';
+    ctx.lineWidth = lw * 1.9;
+    ctx.stroke();
+  }
+}
+
 function drawLabels() {
-  const fs = Math.max(9, Math.round(_S / 72));
+  const fs = Math.max(9, Math.round(cw / 72));
   ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -883,8 +834,8 @@ function drawLabels() {
 
   for (let li = 0; li < contours.length; li++) {
     const lv = contours[li];
-    const segs = lv.segs;
-    const nSeg = segs.length / 4;
+    const s = lv.segs;
+    const nSeg = s.length / 4;
     if (nSeg < 6) continue;
 
     const want = Math.min(4, Math.max(1, Math.round(nSeg / 70)));
@@ -894,9 +845,8 @@ function drawLabels() {
 
     for (let i = 0; i < nSeg; i += stride) {
       const o = i * 4;
-      const p1 = mapToScreen(segs[o],     segs[o + 1]);
-      const p2 = mapToScreen(segs[o + 2], segs[o + 3]);
-      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const x1 = s[o], y1 = s[o + 1], x2 = s[o + 2], y2 = s[o + 3];
+      const dx = x2 - x1, dy = y2 - y1;
       if (dx * dx + dy * dy < 100) continue;
 
       let ang = Math.atan2(dy, dx);
@@ -904,10 +854,10 @@ function drawLabels() {
       if (ang < -Math.PI / 2) ang += Math.PI;
 
       ctx.save();
-      ctx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+      ctx.translate((x1 + x2) * 0.5, (y1 + y2) * 0.5);
       ctx.rotate(ang);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
       ctx.beginPath();
       ctx.roundRect(-tw / 2 - padX, -boxH / 2, tw + padX * 2, boxH, 2.5);
       ctx.fill();
@@ -921,31 +871,21 @@ function drawLabels() {
 
 function drawCursor() {
   if (!pointerInside) return;
-
-  const t = clamp(pointerMap.y / GRID, 0, 1);
-  const w = _S * mapWidthAt(t);
-  const rx = Math.max(3, (brushRadius / GRID) * w);
-
-  const tHalf = brushRadius / GRID;
-  const syHi = mapTToScreenY(Math.min(1, t + tHalf));
-  const syLo = mapTToScreenY(Math.max(0, t - tHalf));
-  const ry = Math.max(3, Math.abs(syHi - syLo) / 2);
-
-  const p = mapToScreen(pointerMap.x, pointerMap.y);
-
+  const r = brushRadius * scale;
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.arc(pointerPos.x, pointerPos.y, r, 0, Math.PI * 2);
   ctx.strokeStyle = tool === 'raise' ? 'rgba(120,235,170,0.9)' : 'rgba(255,150,120,0.9)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([5, 4]);
+  ctx.lineWidth = 1.5 / viewScale();
+  ctx.setLineDash([5 / viewScale(), 4 / viewScale()]);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = tool === 'raise' ? 'rgba(120,235,170,0.10)' : 'rgba(255,150,120,0.10)';
+  ctx.fillStyle = tool === 'raise' ? 'rgba(120,235,170,0.09)' : 'rgba(255,150,120,0.09)';
   ctx.fill();
   ctx.restore();
 }
 
+/* 羅盤：固定在螢幕右上角，顯示螢幕上的光源方向 */
 function drawCompass() {
   const R = 28;
   const px = cw - R - 16;
@@ -967,6 +907,7 @@ function drawCompass() {
   ctx.strokeStyle = 'rgba(90,110,135,0.28)';
   ctx.stroke();
 
+  /* 方位角 + 視圖旋轉 → 螢幕方向 */
   const az = lightAzimuth * Math.PI / 180 + viewRotation;
   const len = R - 9;
   const ex = px + Math.sin(az) * len;
@@ -1045,20 +986,19 @@ function applyBrush(gx, gy, dir) {
 /* ============================== 事件 ============================== */
 function canvasPos(e) {
   const rect = cv.getBoundingClientRect();
-  return {
-    x: (e.clientX - rect.left) * (cw / rect.width),
-    y: (e.clientY - rect.top)  * (ch / rect.height)
-  };
+  const sx = (e.clientX - rect.left) * (cw / rect.width);
+  const sy = (e.clientY - rect.top)  * (ch / rect.height);
+  return screenToCanvas(sx, sy);
+}
+function gridPos(p) {
+  return { x: p.x / scale, y: p.y / scale };
 }
 
 cv.addEventListener('pointerdown', (e) => {
-  updateViewParams();
   const p = canvasPos(e);
-  pointerScreen = p;
+  pointerPos = p;
   pointerInside = true;
-  const g = screenToMap(p.x, p.y);
-  pointerMap = g;
-
+  const g = gridPos(p);
   const dir = (e.shiftKey || e.button === 2 || tool === 'lower') ? -1 : 1;
   dragging = true;
   lastGrid = null;
@@ -1068,15 +1008,12 @@ cv.addEventListener('pointerdown', (e) => {
 });
 
 cv.addEventListener('pointermove', (e) => {
-  updateViewParams();
   const p = canvasPos(e);
-  pointerScreen = p;
+  pointerPos = p;
   pointerInside = true;
   needsDraw = true;
 
-  const g = screenToMap(p.x, p.y);
-  pointerMap = g;
-
+  const g = gridPos(p);
   const ix = clamp(Math.round(g.x), 0, N - 1);
   const iy = clamp(Math.round(g.y), 0, N - 1);
   const idx = iy * N + ix;
@@ -1116,27 +1053,15 @@ btnLower.onclick = () => {
 };
 
 /* 視覺方向 */
-const rTilt = document.getElementById('rTilt');
-const vTilt = document.getElementById('vTilt');
-const rRot  = document.getElementById('rRot');
-const vRot  = document.getElementById('vRot');
-const rAz   = document.getElementById('rAz');
-const vAz   = document.getElementById('vAz');
-const rEl   = document.getElementById('rEl');
-const vEl   = document.getElementById('vEl');
-const rCon  = document.getElementById('rCon');
-const vCon  = document.getElementById('vCon');
+const rAz  = document.getElementById('rAz');
+const vAz  = document.getElementById('vAz');
+const rEl  = document.getElementById('rEl');
+const vEl  = document.getElementById('vEl');
+const rCon = document.getElementById('rCon');
+const vCon = document.getElementById('vCon');
+const rRot = document.getElementById('rRot');
+const vRot = document.getElementById('vRot');
 
-rTilt.oninput = () => {
-  tilt = +rTilt.value;
-  vTilt.textContent = tilt.toFixed(2);
-  needsDraw = true;
-};
-rRot.oninput = () => {
-  viewRotation = (+rRot.value) * Math.PI / 180;
-  vRot.textContent = rRot.value + '°';
-  needsDraw = true;
-};
 rAz.oninput = () => {
   lightAzimuth = +rAz.value;
   vAz.textContent = lightAzimuth + '°';
@@ -1152,6 +1077,11 @@ rCon.oninput = () => {
   vCon.textContent = shadowContrast.toFixed(2);
   terrainDirty = true;
 };
+rRot.oninput = () => {
+  viewRotation = (+rRot.value) * Math.PI / 180;
+  vRot.textContent = rRot.value + '°';
+  needsDraw = true;
+};
 
 /* 時間控制 */
 const btnPlay = document.getElementById('btnPlay');
@@ -1165,6 +1095,7 @@ document.getElementById('btnClearWater').onclick = () => {
   clearWater();
   terrainDirty = true;
 };
+
 document.getElementById('btnRand').onclick = () => {
   generateTerrain((Math.random() * 1e6) | 0);
 };
@@ -1211,9 +1142,9 @@ rStep.oninput = () => {
 };
 
 ui.shade.onchange   = () => { terrainDirty = true; };
-ui.contour.onchange = () => { sceneDirty = true; needsDraw = true; };
+ui.contour.onchange = () => { needsDraw = true; };
 ui.label.onchange   = () => { needsDraw = true; };
-ui.index.onchange   = () => { sceneDirty = true; needsDraw = true; };
+ui.index.onchange   = () => { needsDraw = true; };
 
 /* ============================== 尺寸 ============================== */
 function resizeCanvas() {
@@ -1227,7 +1158,7 @@ function resizeCanvas() {
   cv.height = Math.round(size * dpr);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  updateViewParams();
+  scale = cw / GRID;
 
   needsContour = true;
   needsDraw = true;
@@ -1269,14 +1200,8 @@ function loop(now) {
       buildContours();
       needsContour = false;
       contourSkip = 0;
-      sceneDirty = true;
+      needsDraw = true;
     }
-  }
-
-  if (sceneDirty) {
-    renderScene();
-    sceneDirty = false;
-    needsDraw = true;
   }
 
   if (needsDraw) {
@@ -1293,11 +1218,10 @@ function loop(now) {
   generateTerrain((Math.random() * 1e6) | 0);
   resizeCanvas();
 
-  vTilt.textContent = tilt.toFixed(2);
-  vRot.textContent  = '0°';
-  vAz.textContent   = lightAzimuth + '°';
-  vEl.textContent   = lightElevation + '°';
-  vCon.textContent  = shadowContrast.toFixed(2);
+  vAz.textContent  = lightAzimuth + '°';
+  vEl.textContent  = lightElevation + '°';
+  vCon.textContent = shadowContrast.toFixed(2);
+  vRot.textContent = '0°';
   vSpeed.textContent = timeSpeed.toFixed(2) + '×';
   vRain.textContent  = rainMultiplier.toFixed(1);
   vErosion.textContent = erosionMultiplier.toFixed(1);
