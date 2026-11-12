@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>地理沙盆 · 視覺方向與水位標示</title>
+<title>地理沙盆 · 局部降雨</title>
 <style>
   html, body, *, *::before, *::after {
     user-select: none !important;
@@ -22,7 +22,7 @@
   }
   #app{display:flex;height:100%}
   #panel{
-    width:288px;flex:0 0 288px;height:100%;overflow-y:auto;
+    width:290px;flex:0 0 290px;height:100%;overflow-y:auto;
     background:linear-gradient(180deg,#161c25,#11161e);
     border-right:1px solid #232c38;padding:16px 16px 40px;
   }
@@ -41,6 +41,7 @@
   }
   .lbl:first-of-type{margin-top:2px}
   .row{display:flex;gap:7px;flex-wrap:wrap}
+  .row + .row{margin-top:7px}
   button{
     flex:1 1 auto;min-width:72px;padding:8px 10px;font-size:12px;
     color:#cfe0f3;background:#1e2836;border:1px solid #2e3c4e;
@@ -51,6 +52,7 @@
   button.on{background:#2b6a8f;border-color:#3f93c4;color:#fff;box-shadow:0 0 12px #2b6a8f66}
   button.play{background:#1d5a3a;border-color:#2d8157}
   button.play.on{background:#8f2b2b;border-color:#c43f3f;box-shadow:0 0 12px #8f2b2b66}
+  button.rain.on{background:#1d4f7a;border-color:#3f93c4;box-shadow:0 0 14px #3f93c466}
   input[type=range]{width:100%;accent-color:#4aa3d8;height:18px;cursor:pointer}
   .chk{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;cursor:pointer;color:#b7c6d8}
   .chk input{accent-color:#4aa3d8;width:15px;height:15px;cursor:pointer}
@@ -77,7 +79,7 @@
 <div id="app">
   <aside id="panel">
     <h1>地理沙盆</h1>
-    <div class="sub">TOPOGRAPHIC SANDBOX · 視覺方向與水位</div>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 局部降雨</div>
 
     <!-- 視覺方向 -->
     <div class="group">
@@ -128,6 +130,11 @@
         <button id="btnRaise" class="on">抬升 ▲</button>
         <button id="btnLower">下陷 ▼</button>
       </div>
+      <div class="row">
+        <button id="btnRain" class="rain">降雨 🌧</button>
+      </div>
+      <div class="lbl"><span>降雨強度</span><span class="val" id="vRainBrush">1.0</span></div>
+      <input type="range" id="rRainBrush" min="0.2" max="4" value="1" step="0.1">
     </div>
 
     <div class="group">
@@ -147,11 +154,10 @@
     </div>
 
     <div class="hint">
-      <b>左鍵拖曳</b>抬升地形<br>
-      <b>Shift + 拖曳</b>或<b>右鍵拖曳</b>下陷地形<br>
-      右上角羅盤顯示目前光源方向。<br>
-      <b>視圖旋轉</b>會旋轉整張地圖，方便從不同方位觀察。<br>
-      <b>海平面</b>控制初始海洋水位；<b>水位高度標示</b>會在水面顯示海拔數字。
+      <b>左鍵拖曳</b>抬升地形 · <b>Shift + 拖曳</b>或<b>右鍵</b>下陷<br>
+      <b>降雨工具</b>：按住滑鼠在指定區域持續降雨。<br>
+      暫停時降雨仍會累積，開始時間後水流動沖刷。<br>
+      <b>水位高度標示</b>會在水面顯示海拔數字。
     </div>
   </aside>
 
@@ -203,12 +209,17 @@ let contourSkip  = 0;
 let terrainDirty = true;
 
 /* 工具狀態 */
-let tool = 'raise';
+let tool = 'raise';           // 'raise' | 'lower' | 'rain'
 let brushRadius = 14;
 let pointerInside = false;
 let pointerPos = { x: 0, y: 0 };
 let dragging = false;
 let lastGrid = null;
+
+/* 局部降雨 */
+let isRaining = false;
+let rainBrushAmount = 1.0;
+let rainDrops = [];           // 雨滴粒子
 
 /* 時間推進 */
 let timeRunning = false;
@@ -275,19 +286,19 @@ function fbm(x, y, seed, oct) {
 
 /* ============================== 色階（避免藍色，與水區分） ============================== */
 const STOPS = [
-  [0.00, [ 16,  24,  34]],   // 深海床（深灰藍）
+  [0.00, [ 16,  24,  34]],
   [0.18, [ 28,  40,  52]],
   [0.32, [ 42,  58,  68]],
-  [0.40, [ 58,  74,  82]],   // 淺海床
-  [0.44, [110, 118, 108]],   // 潮間帶
-  [0.455,[212, 200, 158]],   // 沙灘
-  [0.48, [196, 188, 128]],   // 沙丘
-  [0.53, [122, 158,  88]],   // 草地
+  [0.40, [ 58,  74,  82]],
+  [0.44, [110, 118, 108]],
+  [0.455,[212, 200, 158]],
+  [0.48, [196, 188, 128]],
+  [0.53, [122, 158,  88]],
   [0.63, [ 72, 124,  62]],
-  [0.72, [102, 108,  70]],   // 灌木
-  [0.81, [136, 122, 100]],   // 岩石
-  [0.89, [176, 168, 158]],   // 高山岩
-  [0.95, [232, 234, 240]],   // 雪線
+  [0.72, [102, 108,  70]],
+  [0.81, [136, 122, 100]],
+  [0.89, [176, 168, 158]],
+  [0.95, [232, 234, 240]],
   [1.00, [255, 255, 255]],
 ];
 const LUT_N = 512;
@@ -344,7 +355,6 @@ function flattenTerrain() {
   needsContour = true;
 }
 
-/* 依海平面將低於海平面的地形填水 */
 function fillOcean() {
   for (let i = 0; i < N * N; i++) {
     const d = seaLevel - hmap[i];
@@ -358,6 +368,7 @@ function clearWater() {
   sed.fill(0);
   fluxH.fill(0);
   fluxV.fill(0);
+  rainDrops.length = 0;
   needsDraw = true;
 }
 
@@ -410,19 +421,17 @@ function renderTerrain() {
         r *= sh; g *= sh; b *= sh;
       }
 
-      /* ---- 水體混色（淺藍半透明，與灰綠地形對比鮮明） ---- */
+      /* ---- 水體混色（青藍半透明，與灰綠地形區分） ---- */
       const w = W[i];
       if (w > 0.005) {
-        let wf = Math.sqrt(w) * 3.2;      // 水量越大越不透明
+        let wf = Math.sqrt(w) * 3.2;
         if (wf > 1) wf = 1;
         const deep = w * 12 > 1 ? 1 : w * 12;
 
-        // 淺水：淡青藍 → 深水：飽和藍綠
         let wr = 150 - 90 * deep;
         let wg = 210 - 80 * deep;
         let wb = 240 - 30 * deep;
 
-        // 沉積物使水變濁（偏土黃）
         const s = S[i];
         if (s > 0.0003) {
           let cc = s / (w + 0.001) * 5;
@@ -437,7 +446,6 @@ function renderTerrain() {
         g = g * (1 - blend) + wg * blend;
         b = b * (1 - blend) + wb * blend;
 
-        // 水岸暗邊（與相鄰非水格的高差產生輪廓感）
         if (x > 0 && W[i - 1] < 0.005) {
           r *= 0.75; g *= 0.78; b *= 0.82;
         } else if (y > 0 && W[i - N] < 0.005) {
@@ -635,6 +643,86 @@ function simulate(dt) {
   }
 }
 
+/* ============================== 局部降雨 ============================== */
+const RAIN_MAX_WATER = 0.45;   // 局部降雨的水量上限，防止無限累積
+
+function rainAt(gx, gy, dt) {
+  const R = brushRadius;
+  const R2 = R * R;
+  const intensity = 0.024 * rainBrushAmount;
+
+  const x0 = Math.max(0, Math.floor(gx - R));
+  const x1 = Math.min(N - 1, Math.ceil(gx + R));
+  const y0 = Math.max(0, Math.floor(gy - R));
+  const y1 = Math.min(N - 1, Math.ceil(gy + R));
+
+  for (let y = y0; y <= y1; y++) {
+    const row = y * N;
+    const dy = y - gy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - gx;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > R2) continue;
+      const f = 1 - d2 / R2;
+      const w = f * f;
+      const idx = row + x;
+      const nv = water[idx] + intensity * w * dt;
+      water[idx] = nv > RAIN_MAX_WATER ? RAIN_MAX_WATER : nv;
+    }
+  }
+}
+
+/* 雨滴粒子 */
+function spawnRainDrop() {
+  if (!pointerInside) return;
+  const R = brushRadius * scale;
+  const ang = Math.random() * Math.PI * 2;
+  const r = Math.sqrt(Math.random()) * R;
+  rainDrops.push({
+    x: pointerPos.x + Math.cos(ang) * r,
+    y: pointerPos.y + Math.sin(ang) * r - R * 0.35,
+    vx: 14 + Math.random() * 18,
+    vy: 190 + Math.random() * 150,
+    life: 0.38 + Math.random() * 0.28,
+  });
+}
+
+function updateRainDrops(dt) {
+  if (isRaining && tool === 'rain' && pointerInside) {
+    const count = Math.ceil(dt * 150);
+    for (let i = 0; i < count; i++) spawnRainDrop();
+  }
+
+  for (let i = rainDrops.length - 1; i >= 0; i--) {
+    const d = rainDrops[i];
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    d.life -= dt;
+    if (d.life <= 0) rainDrops.splice(i, 1);
+  }
+
+  if (rainDrops.length > 280) {
+    rainDrops.splice(0, rainDrops.length - 280);
+  }
+}
+
+function drawRainDrops() {
+  if (rainDrops.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(175, 220, 255, 0.58)';
+  ctx.lineWidth = 1.2 / viewScale();
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < rainDrops.length; i++) {
+    const d = rainDrops[i];
+    const tail = 0.035;
+    ctx.moveTo(d.x, d.y);
+    ctx.lineTo(d.x - d.vx * tail, d.y - d.vy * tail);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 /* ============================== 等高線 (Marching Squares) ============================== */
 function edgePoint(e, x, y, v0, v1, v2, v3, level, out) {
   let ax, ay, av, bx, by, bv;
@@ -776,7 +864,6 @@ function viewScale() {
   return Math.abs(Math.cos(viewRotation)) + Math.abs(Math.sin(viewRotation));
 }
 
-/* 螢幕座標 → 未旋轉地圖座標 */
 function screenToCanvas(x, y) {
   const vs = viewScale();
   const cx = cw / 2, cy = ch / 2;
@@ -788,7 +875,6 @@ function screenToCanvas(x, y) {
   return { x: cx + rx, y: cy + ry };
 }
 
-/* 未旋轉地圖座標 → 螢幕座標 */
 function canvasToScreen(x, y) {
   const vs = viewScale();
   const cx = cw / 2, cy = ch / 2;
@@ -818,11 +904,12 @@ function draw() {
   ctx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, cw, ch);
 
   if (ui.contour.checked) drawContours();
+
+  drawRainDrops();
   drawCursor();
 
   ctx.restore();
 
-  /* 螢幕座標層：等高線標註、水位標註、羅盤 */
   if (ui.contour.checked && ui.label.checked) drawContourLabels();
   if (ui.waterLabel.checked) drawWaterLabels();
   drawCompass();
@@ -864,7 +951,6 @@ function drawContours() {
   }
 }
 
-/* 等高線標註：在未旋轉的螢幕座標中繪製，文字永遠水平可讀 */
 function drawContourLabels() {
   const fs = Math.max(9, Math.round(cw / 72));
   ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
@@ -904,14 +990,13 @@ function drawContourLabels() {
   }
 }
 
-/* 水位高度標示：在水體內部取樣，顯示水面海拔 */
 function drawWaterLabels() {
   const fs = Math.max(8, Math.round(cw / 86));
   ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const spacing = 26;   // 網格取樣間隔
+  const spacing = 26;
   const minWater = 0.02;
 
   const H = hmap, W = water;
@@ -922,7 +1007,6 @@ function drawWaterLabels() {
       const w = W[i];
       if (w < minWater) continue;
 
-      // 僅取水體內部點，避免岸邊密集
       let interior = true;
       for (let dy = -2; dy <= 2 && interior; dy += 2) {
         for (let dx = -2; dx <= 2; dx += 2) {
@@ -934,7 +1018,6 @@ function drawWaterLabels() {
       const alt = Math.round((H[i] + w) * 1000);
       const txt = `${alt}m`;
       const tw = ctx.measureText(txt).width;
-
       const mid = canvasToScreen(x * scale, y * scale);
 
       ctx.fillStyle = 'rgba(8,32,52,0.55)';
@@ -951,20 +1034,32 @@ function drawWaterLabels() {
 function drawCursor() {
   if (!pointerInside) return;
   const r = brushRadius * scale;
+
+  let stroke, fill;
+  if (tool === 'raise') {
+    stroke = 'rgba(120,235,170,0.9)';
+    fill   = 'rgba(120,235,170,0.09)';
+  } else if (tool === 'lower') {
+    stroke = 'rgba(255,150,120,0.9)';
+    fill   = 'rgba(255,150,120,0.09)';
+  } else {
+    stroke = 'rgba(140,210,255,0.95)';
+    fill   = 'rgba(140,210,255,0.11)';
+  }
+
   ctx.save();
   ctx.beginPath();
   ctx.arc(pointerPos.x, pointerPos.y, r, 0, Math.PI * 2);
-  ctx.strokeStyle = tool === 'raise' ? 'rgba(120,235,170,0.9)' : 'rgba(255,150,120,0.9)';
+  ctx.strokeStyle = stroke;
   ctx.lineWidth = 1.5 / viewScale();
   ctx.setLineDash([5 / viewScale(), 4 / viewScale()]);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = tool === 'raise' ? 'rgba(120,235,170,0.09)' : 'rgba(255,150,120,0.09)';
+  ctx.fillStyle = fill;
   ctx.fill();
   ctx.restore();
 }
 
-/* 羅盤：螢幕右上角，顯示螢幕上的光源方向 */
 function drawCompass() {
   const R = 28;
   const px = cw - R - 16;
@@ -1077,11 +1172,24 @@ cv.addEventListener('pointerdown', (e) => {
   pointerPos = p;
   pointerInside = true;
   const g = gridPos(p);
-  const dir = (e.shiftKey || e.button === 2 || tool === 'lower') ? -1 : 1;
-  dragging = true;
-  lastGrid = null;
+
   cv.setPointerCapture(e.pointerId);
-  applyBrush(g.x, g.y, dir);
+
+  if (tool === 'rain') {
+    isRaining = true;
+    dragging = false;
+    lastGrid = null;
+    // 立即降雨一次，讓點擊有即時回饋
+    const rainDt = timeRunning ? 0.05 * timeSpeed : 0.05;
+    rainAt(g.x, g.y, rainDt);
+    for (let i = 0; i < 6; i++) spawnRainDrop();
+    terrainDirty = true;
+  } else {
+    const dir = (e.shiftKey || e.button === 2 || tool === 'lower') ? -1 : 1;
+    dragging = true;
+    lastGrid = null;
+    applyBrush(g.x, g.y, dir);
+  }
   needsDraw = true;
 });
 
@@ -1100,13 +1208,19 @@ cv.addEventListener('pointermove', (e) => {
   const depTxt = dep > 0.0005 ? ` · 水深 ${Math.round(dep * 1000)}` : '';
   readout.textContent = `海拔 ${alt} m${depTxt}`;
 
-  if (dragging) {
+  if (isRaining && tool === 'rain') {
+    // 位置已更新，降雨在 loop 中處理
+  } else if (dragging) {
     const dir = (e.shiftKey || (e.buttons & 2) || tool === 'lower') ? -1 : 1;
     applyBrush(g.x, g.y, dir);
   }
 });
 
-function endDrag() { dragging = false; lastGrid = null; }
+function endDrag() {
+  dragging = false;
+  isRaining = false;
+  lastGrid = null;
+}
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
 cv.addEventListener('pointerleave', () => { pointerInside = false; needsDraw = true; });
@@ -1116,18 +1230,30 @@ cv.addEventListener('contextmenu', (e) => e.preventDefault());
 /* ============================== UI 綁定 ============================== */
 const btnRaise = document.getElementById('btnRaise');
 const btnLower = document.getElementById('btnLower');
+const btnRain  = document.getElementById('btnRain');
 
-btnRaise.onclick = () => {
-  tool = 'raise';
-  btnRaise.classList.add('on');
-  btnLower.classList.remove('on');
+function selectTool(t) {
+  tool = t;
+  btnRaise.classList.toggle('on', t === 'raise');
+  btnLower.classList.toggle('on', t === 'lower');
+  btnRain.classList.toggle('on',  t === 'rain');
+  // 切換工具時中斷目前的拖曳 / 降雨
+  dragging = false;
+  isRaining = false;
+  lastGrid = null;
   needsDraw = true;
-};
-btnLower.onclick = () => {
-  tool = 'lower';
-  btnLower.classList.add('on');
-  btnRaise.classList.remove('on');
-  needsDraw = true;
+}
+
+btnRaise.onclick = () => selectTool('raise');
+btnLower.onclick = () => selectTool('lower');
+btnRain.onclick  = () => selectTool('rain');
+
+/* 降雨強度 */
+const rRainBrush = document.getElementById('rRainBrush');
+const vRainBrush = document.getElementById('vRainBrush');
+rRainBrush.oninput = () => {
+  rainBrushAmount = +rRainBrush.value;
+  vRainBrush.textContent = rainBrushAmount.toFixed(1);
 };
 
 /* 視覺方向 */
@@ -1208,7 +1334,6 @@ const vSea = document.getElementById('vSea');
 rSea.oninput = () => {
   seaLevel = (+rSea.value) / 1000;
   vSea.textContent = rSea.value + ' m';
-  // 只更新低於新海平面的區域（補水），不主動抽水
   for (let i = 0; i < N * N; i++) {
     const d = seaLevel - hmap[i];
     if (d > water[i]) water[i] = d;
@@ -1267,6 +1392,20 @@ function loop(now) {
   const realDt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
+  /* ---- 局部降雨（不管是否暫停都有效） ---- */
+  if (isRaining && tool === 'rain' && pointerInside) {
+    const gx = pointerPos.x / scale;
+    const gy = pointerPos.y / scale;
+    const rainDt = timeRunning ? realDt * timeSpeed : realDt;
+    rainAt(gx, gy, rainDt);
+    terrainDirty = true;
+  }
+
+  /* ---- 雨滴粒子 ---- */
+  updateRainDrops(realDt);
+  if (rainDrops.length > 0) needsDraw = true;
+
+  /* ---- 時間推進 ---- */
   if (timeRunning) {
     const totalDt = Math.min(0.1, realDt * timeSpeed);
     const steps = Math.max(1, Math.min(3, Math.ceil(totalDt / 0.03)));
@@ -1321,6 +1460,7 @@ function loop(now) {
   vErosion.textContent = erosionMultiplier.toFixed(1);
   vStep.textContent  = Math.round(contourStep * 1000);
   vSea.textContent   = Math.round(seaLevel * 1000) + ' m';
+  vRainBrush.textContent = rainBrushAmount.toFixed(1);
   rSea.value = Math.round(seaLevel * 1000);
 
   timeRunning = false;
