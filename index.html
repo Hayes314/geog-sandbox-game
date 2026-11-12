@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>地理沙盆 · 水流、時間與視覺方向</title>
+<title>地理沙盆 · 視覺方向與水位標示</title>
 <style>
   html, body, *, *::before, *::after {
     user-select: none !important;
@@ -22,7 +22,7 @@
   }
   #app{display:flex;height:100%}
   #panel{
-    width:282px;flex:0 0 282px;height:100%;overflow-y:auto;
+    width:288px;flex:0 0 288px;height:100%;overflow-y:auto;
     background:linear-gradient(180deg,#161c25,#11161e);
     border-right:1px solid #232c38;padding:16px 16px 40px;
   }
@@ -77,7 +77,7 @@
 <div id="app">
   <aside id="panel">
     <h1>地理沙盆</h1>
-    <div class="sub">TOPOGRAPHIC SANDBOX · 視覺方向</div>
+    <div class="sub">TOPOGRAPHIC SANDBOX · 視覺方向與水位</div>
 
     <!-- 視覺方向 -->
     <div class="group">
@@ -108,6 +108,8 @@
       <input type="range" id="rRain" min="0" max="4" value="1" step="0.1">
       <div class="lbl"><span>侵蝕力</span><span class="val" id="vErosion">1.0</span></div>
       <input type="range" id="rErosion" min="0" max="3" value="1" step="0.1">
+      <div class="lbl"><span>海平面</span><span class="val" id="vSea">430 m</span></div>
+      <input type="range" id="rSea" min="0" max="800" value="430" step="5">
     </div>
 
     <!-- 地形 -->
@@ -139,6 +141,7 @@
       <label class="t">顯示</label>
       <label class="chk"><input type="checkbox" id="cContour" checked>等高線</label>
       <label class="chk"><input type="checkbox" id="cLabel" checked>高度標註</label>
+      <label class="chk"><input type="checkbox" id="cWaterLabel" checked>水位高度標示</label>
       <label class="chk"><input type="checkbox" id="cShade" checked>山體陰影</label>
       <label class="chk"><input type="checkbox" id="cIndex" checked>計曲線加粗</label>
     </div>
@@ -147,7 +150,8 @@
       <b>左鍵拖曳</b>抬升地形<br>
       <b>Shift + 拖曳</b>或<b>右鍵拖曳</b>下陷地形<br>
       右上角羅盤顯示目前光源方向。<br>
-      <b>視圖旋轉</b>會旋轉整張地圖，方便從不同方位觀察。
+      <b>視圖旋轉</b>會旋轉整張地圖，方便從不同方位觀察。<br>
+      <b>海平面</b>控制初始海洋水位；<b>水位高度標示</b>會在水面顯示海拔數字。
     </div>
   </aside>
 
@@ -164,7 +168,6 @@
 /* ============================== 基本設定 ============================== */
 const N = 160;
 const GRID = N - 1;
-const SEA = 0.43;
 
 const cv      = document.getElementById('cv');
 const ctx     = cv.getContext('2d');
@@ -213,25 +216,29 @@ let timeSpeed   = 1.0;
 let rainMultiplier    = 1.0;
 let erosionMultiplier = 1.0;
 
+/* 海平面（0~1 高度單位，UI 顯示為 0~1000 m） */
+let seaLevel = 0.43;
+
 /* 視覺方向 */
-let lightAzimuth   = 315;      // 度，0 = 北（螢幕上方），順時針
-let lightElevation = 45;       // 度
-let shadowContrast = 0.70;     // 漫反射強度
-let viewRotation   = 0;        // 弧度
+let lightAzimuth   = 315;
+let lightElevation = 45;
+let shadowContrast = 0.70;
+let viewRotation   = 0;
 
 /* 模擬常數 */
 const baseRain     = 0.0030;
 const flowK        = 3.0;
 const baseErosion  = 2.0;
 const baseCapacity = 12.0;
-const baseEvap     = 0.010;
+const baseEvap     = 0.004;
 
 /* 顯示開關 */
 const ui = {
-  contour: document.getElementById('cContour'),
-  label:   document.getElementById('cLabel'),
-  shade:   document.getElementById('cShade'),
-  index:   document.getElementById('cIndex'),
+  contour:    document.getElementById('cContour'),
+  label:      document.getElementById('cLabel'),
+  waterLabel: document.getElementById('cWaterLabel'),
+  shade:      document.getElementById('cShade'),
+  index:      document.getElementById('cIndex'),
 };
 
 /* ============================== 雜訊 ============================== */
@@ -266,21 +273,21 @@ function fbm(x, y, seed, oct) {
   return sum / norm;
 }
 
-/* ============================== 色階 ============================== */
+/* ============================== 色階（避免藍色，與水區分） ============================== */
 const STOPS = [
-  [0.00, [  8,  24,  48]],
-  [0.20, [ 16,  52,  96]],
-  [0.34, [ 30,  92, 140]],
-  [0.41, [ 62, 132, 176]],
-  [0.435,[ 96, 170, 192]],
-  [0.452,[222, 210, 160]],
-  [0.480,[198, 198, 138]],
-  [0.530,[124, 168,  92]],
-  [0.630,[ 74, 132,  66]],
-  [0.720,[108, 116,  76]],
-  [0.810,[140, 130, 110]],
-  [0.890,[178, 172, 164]],
-  [0.950,[236, 237, 242]],
+  [0.00, [ 16,  24,  34]],   // 深海床（深灰藍）
+  [0.18, [ 28,  40,  52]],
+  [0.32, [ 42,  58,  68]],
+  [0.40, [ 58,  74,  82]],   // 淺海床
+  [0.44, [110, 118, 108]],   // 潮間帶
+  [0.455,[212, 200, 158]],   // 沙灘
+  [0.48, [196, 188, 128]],   // 沙丘
+  [0.53, [122, 158,  88]],   // 草地
+  [0.63, [ 72, 124,  62]],
+  [0.72, [102, 108,  70]],   // 灌木
+  [0.81, [136, 122, 100]],   // 岩石
+  [0.89, [176, 168, 158]],   // 高山岩
+  [0.95, [232, 234, 240]],   // 雪線
   [1.00, [255, 255, 255]],
 ];
 const LUT_N = 512;
@@ -318,6 +325,7 @@ function generateTerrain(seed) {
     }
   }
   clearWater();
+  fillOcean();
   renderTerrain();
   needsContour = true;
 }
@@ -331,8 +339,18 @@ function flattenTerrain() {
     }
   }
   clearWater();
+  fillOcean();
   renderTerrain();
   needsContour = true;
+}
+
+/* 依海平面將低於海平面的地形填水 */
+function fillOcean() {
+  for (let i = 0; i < N * N; i++) {
+    const d = seaLevel - hmap[i];
+    water[i] = d > 0 ? d : 0;
+  }
+  needsDraw = true;
 }
 
 function clearWater() {
@@ -343,7 +361,7 @@ function clearWater() {
   needsDraw = true;
 }
 
-/* ============================== 地形貼圖（動態光照） ============================== */
+/* ============================== 地形貼圖（動態光照 + 水體） ============================== */
 function initTerrainImage() {
   terrainCanvas.width  = N;
   terrainCanvas.height = N;
@@ -356,7 +374,6 @@ function renderTerrain() {
   const px = terrainPixels;
   const shading = ui.shade.checked;
 
-  /* 依方位角與仰角計算光源向量 */
   const azRad = lightAzimuth   * Math.PI / 180;
   const elRad = lightElevation * Math.PI / 180;
   const lx =  Math.sin(azRad) * Math.cos(elRad);
@@ -393,29 +410,39 @@ function renderTerrain() {
         r *= sh; g *= sh; b *= sh;
       }
 
-      /* ---- 水體混色 ---- */
+      /* ---- 水體混色（淺藍半透明，與灰綠地形對比鮮明） ---- */
       const w = W[i];
-      if (w > 0.0003) {
-        let wf = Math.sqrt(w) * 2.5;
+      if (w > 0.005) {
+        let wf = Math.sqrt(w) * 3.2;      // 水量越大越不透明
         if (wf > 1) wf = 1;
-        const deep = w * 10 > 1 ? 1 : w * 10;
-        let wr = 90 - 60 * deep;
-        let wg = 150 - 80 * deep;
-        let wb = 210 - 10 * deep;
+        const deep = w * 12 > 1 ? 1 : w * 12;
 
+        // 淺水：淡青藍 → 深水：飽和藍綠
+        let wr = 150 - 90 * deep;
+        let wg = 210 - 80 * deep;
+        let wb = 240 - 30 * deep;
+
+        // 沉積物使水變濁（偏土黃）
         const s = S[i];
         if (s > 0.0003) {
           let cc = s / (w + 0.001) * 5;
           if (cc > 1) cc = 1;
-          wr = wr * (1 - cc) + 160 * cc;
-          wg = wg * (1 - cc) + 130 * cc;
-          wb = wb * (1 - cc) +  90 * cc;
+          wr = wr * (1 - cc) + 170 * cc;
+          wg = wg * (1 - cc) + 150 * cc;
+          wb = wb * (1 - cc) + 110 * cc;
         }
 
-        const blend = wf * 0.85;
+        const blend = wf * 0.80;
         r = r * (1 - blend) + wr * blend;
         g = g * (1 - blend) + wg * blend;
         b = b * (1 - blend) + wb * blend;
+
+        // 水岸暗邊（與相鄰非水格的高差產生輪廓感）
+        if (x > 0 && W[i - 1] < 0.005) {
+          r *= 0.75; g *= 0.78; b *= 0.82;
+        } else if (y > 0 && W[i - N] < 0.005) {
+          r *= 0.80; g *= 0.82; b *= 0.85;
+        }
       }
 
       const o = i * 4;
@@ -448,6 +475,8 @@ function computeFlux() {
           if (f < -cap) f = -cap;
         }
         fluxH[i] = f;
+      } else {
+        fluxH[i] = 0;
       }
 
       if (y < N - 1) {
@@ -462,6 +491,8 @@ function computeFlux() {
           if (f < -cap) f = -cap;
         }
         fluxV[i] = f;
+      } else {
+        fluxV[i] = 0;
       }
     }
   }
@@ -739,13 +770,13 @@ function buildContours() {
   contours = levels;
 }
 
-/* ============================== 視圖變換 ============================== */
+/* ============================== 視圖變換工具 ============================== */
 function viewScale() {
   if (viewRotation === 0) return 1;
   return Math.abs(Math.cos(viewRotation)) + Math.abs(Math.sin(viewRotation));
 }
 
-/* 螢幕座標 → 未旋轉的地圖座標 */
+/* 螢幕座標 → 未旋轉地圖座標 */
 function screenToCanvas(x, y) {
   const vs = viewScale();
   const cx = cw / 2, cy = ch / 2;
@@ -755,6 +786,16 @@ function screenToCanvas(x, y) {
   const rx =  dx * c + dy * s;
   const ry = -dx * s + dy * c;
   return { x: cx + rx, y: cy + ry };
+}
+
+/* 未旋轉地圖座標 → 螢幕座標 */
+function canvasToScreen(x, y) {
+  const vs = viewScale();
+  const cx = cw / 2, cy = ch / 2;
+  const dx = (x - cx) * vs;
+  const dy = (y - cy) * vs;
+  const c = Math.cos(viewRotation), s = Math.sin(viewRotation);
+  return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c };
 }
 
 /* ============================== 繪製 ============================== */
@@ -776,14 +817,14 @@ function draw() {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(terrainCanvas, 0, 0, N, N, 0, 0, cw, ch);
 
-  if (ui.contour.checked) {
-    drawContours();
-    if (ui.label.checked) drawLabels();
-  }
-
+  if (ui.contour.checked) drawContours();
   drawCursor();
+
   ctx.restore();
 
+  /* 螢幕座標層：等高線標註、水位標註、羅盤 */
+  if (ui.contour.checked && ui.label.checked) drawContourLabels();
+  if (ui.waterLabel.checked) drawWaterLabels();
   drawCompass();
 }
 
@@ -823,7 +864,8 @@ function drawContours() {
   }
 }
 
-function drawLabels() {
+/* 等高線標註：在未旋轉的螢幕座標中繪製，文字永遠水平可讀 */
+function drawContourLabels() {
   const fs = Math.max(9, Math.round(cw / 72));
   ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
   ctx.textAlign = 'center';
@@ -849,22 +891,59 @@ function drawLabels() {
       const dx = x2 - x1, dy = y2 - y1;
       if (dx * dx + dy * dy < 100) continue;
 
-      let ang = Math.atan2(dy, dx);
-      if (ang > Math.PI / 2)  ang -= Math.PI;
-      if (ang < -Math.PI / 2) ang += Math.PI;
+      const mid = canvasToScreen((x1 + x2) * 0.5, (y1 + y2) * 0.5);
 
-      ctx.save();
-      ctx.translate((x1 + x2) * 0.5, (y1 + y2) * 0.5);
-      ctx.rotate(ang);
-
-      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.beginPath();
-      ctx.roundRect(-tw / 2 - padX, -boxH / 2, tw + padX * 2, boxH, 2.5);
+      ctx.roundRect(mid.x - tw / 2 - padX, mid.y - boxH / 2, tw + padX * 2, boxH, 2.5);
       ctx.fill();
 
       ctx.fillStyle = '#241a10';
-      ctx.fillText(txt, 0, 0.5);
-      ctx.restore();
+      ctx.fillText(txt, mid.x, mid.y + 0.5);
+    }
+  }
+}
+
+/* 水位高度標示：在水體內部取樣，顯示水面海拔 */
+function drawWaterLabels() {
+  const fs = Math.max(8, Math.round(cw / 86));
+  ctx.font = `600 ${fs}px ui-monospace,"SF Mono",Consolas,monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const spacing = 26;   // 網格取樣間隔
+  const minWater = 0.02;
+
+  const H = hmap, W = water;
+
+  for (let y = spacing; y < N - spacing; y += spacing) {
+    for (let x = spacing; x < N - spacing; x += spacing) {
+      const i = y * N + x;
+      const w = W[i];
+      if (w < minWater) continue;
+
+      // 僅取水體內部點，避免岸邊密集
+      let interior = true;
+      for (let dy = -2; dy <= 2 && interior; dy += 2) {
+        for (let dx = -2; dx <= 2; dx += 2) {
+          if (W[(y + dy) * N + (x + dx)] < 0.005) { interior = false; break; }
+        }
+      }
+      if (!interior) continue;
+
+      const alt = Math.round((H[i] + w) * 1000);
+      const txt = `${alt}m`;
+      const tw = ctx.measureText(txt).width;
+
+      const mid = canvasToScreen(x * scale, y * scale);
+
+      ctx.fillStyle = 'rgba(8,32,52,0.55)';
+      ctx.beginPath();
+      ctx.roundRect(mid.x - tw / 2 - 3.5, mid.y - fs / 2 - 2.5, tw + 7, fs + 5, 3);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(180,225,255,0.96)';
+      ctx.fillText(txt, mid.x, mid.y + 0.5);
     }
   }
 }
@@ -885,7 +964,7 @@ function drawCursor() {
   ctx.restore();
 }
 
-/* 羅盤：固定在螢幕右上角，顯示螢幕上的光源方向 */
+/* 羅盤：螢幕右上角，顯示螢幕上的光源方向 */
 function drawCompass() {
   const R = 28;
   const px = cw - R - 16;
@@ -907,7 +986,6 @@ function drawCompass() {
   ctx.strokeStyle = 'rgba(90,110,135,0.28)';
   ctx.stroke();
 
-  /* 方位角 + 視圖旋轉 → 螢幕方向 */
   const az = lightAzimuth * Math.PI / 180 + viewRotation;
   const len = R - 9;
   const ex = px + Math.sin(az) * len;
@@ -1124,6 +1202,21 @@ rErosion.oninput = () => {
   vErosion.textContent = erosionMultiplier.toFixed(1);
 };
 
+/* 海平面 */
+const rSea = document.getElementById('rSea');
+const vSea = document.getElementById('vSea');
+rSea.oninput = () => {
+  seaLevel = (+rSea.value) / 1000;
+  vSea.textContent = rSea.value + ' m';
+  // 只更新低於新海平面的區域（補水），不主動抽水
+  for (let i = 0; i < N * N; i++) {
+    const d = seaLevel - hmap[i];
+    if (d > water[i]) water[i] = d;
+  }
+  terrainDirty = true;
+  needsDraw = true;
+};
+
 const rRadius = document.getElementById('rRadius');
 const vRadius = document.getElementById('vRadius');
 rRadius.oninput = () => {
@@ -1141,10 +1234,11 @@ rStep.oninput = () => {
   needsContour = true;
 };
 
-ui.shade.onchange   = () => { terrainDirty = true; };
-ui.contour.onchange = () => { needsDraw = true; };
-ui.label.onchange   = () => { needsDraw = true; };
-ui.index.onchange   = () => { needsDraw = true; };
+ui.shade.onchange      = () => { terrainDirty = true; };
+ui.contour.onchange    = () => { needsDraw = true; };
+ui.label.onchange      = () => { needsDraw = true; };
+ui.waterLabel.onchange = () => { needsDraw = true; };
+ui.index.onchange      = () => { needsDraw = true; };
 
 /* ============================== 尺寸 ============================== */
 function resizeCanvas() {
@@ -1226,6 +1320,8 @@ function loop(now) {
   vRain.textContent  = rainMultiplier.toFixed(1);
   vErosion.textContent = erosionMultiplier.toFixed(1);
   vStep.textContent  = Math.round(contourStep * 1000);
+  vSea.textContent   = Math.round(seaLevel * 1000) + ' m';
+  rSea.value = Math.round(seaLevel * 1000);
 
   timeRunning = false;
   btnPlay.classList.remove('on');
